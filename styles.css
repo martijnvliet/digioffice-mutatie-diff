@@ -1,0 +1,119 @@
+
+#do-compare-slot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+#do-compare-btn {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0;
+  padding: 8px 12px;
+  background: #1f4e79;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+#do-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.do-modal {
+  background: white;
+  width: 1100px;
+  max-height: 90vh;
+  overflow: auto;
+  padding: 20px;
+  border-radius: 6px;
+}
+
+.do-header {
+  position: sticky;
+  top: 0;
+  background: white;
+  padding-bottom: 8px;
+}
+
+.do-legend span {
+  margin-right: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.legend-added {
+  background: #e6ffed;
+}
+
+.legend-removed {
+  background: #ffeef0;
+}
+
+.do-field-title {
+  font-weight: bold;
+  margin: 6px 0;
+}
+
+.do-columns {
+  display: flex;
+  max-height: 65vh;
+  overflow: hidden;
+  gap: 20px;
+}
+
+.do-old,
+.do-new {
+  flex: 1;
+  overflow-y: auto;
+  background: #f8f8f8;
+  padding: 10px;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  white-space: pre;
+  line-height: 1.45;
+}
+
+.ln {
+  width: 48px;
+  min-width: 48px;
+  display: inline-block;
+  text-align: right;
+  padding-right: 10px;
+  color: #888;
+  user-select: none;
+}
+
+.diff-added {
+  background: #e6ffed;
+}
+
+.diff-removed {
+  background: #ffeef0;
+}
+
+.wdiff-added {
+  background: #acf2bd;
+}
+
+.wdiff-removed {
+  background: #fdb8c0;
+}
+
+.do-selected {
+  outline: 2px solid orange;
+}
+
+#do-close {
+  margin-top: 20px;
+  padding: 8px 12px;
+}
