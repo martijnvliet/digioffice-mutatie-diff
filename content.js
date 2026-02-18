@@ -315,6 +315,260 @@
     });
   }
 
+
+  const csharpSuggestions = [
+    "using",
+    "namespace",
+    "public",
+    "private",
+    "class",
+    "void",
+    "var",
+    "new",
+    "return",
+    "if",
+    "else",
+    "foreach",
+    "WSWerkstroomEntity",
+    "WSProcesEntity",
+    "BouwInkoopContractEntity",
+    "EntityTools",
+    "MetaDataFields",
+    "GetMetaDataField",
+    "RegistrationValue"
+  ];
+
+  const powershellSuggestions = [
+    "$Document",
+    "$docinfo",
+    "$CurrentDocInfo",
+    "$usercontrol",
+    "$EntityTools",
+    "$null",
+    "$true",
+    "$false",
+    "if",
+    "else",
+    "foreach",
+    "-eq",
+    "-ne",
+    "-and",
+    "-or",
+    "-not",
+    "GetMetaDataField",
+    "RegistrationValue"
+  ];
+
+  const autocompleteState = {
+    panel: null,
+    textarea: null,
+    items: [],
+    selectedIndex: 0,
+    prefixStart: 0,
+    prefixEnd: 0
+  };
+
+  function getEditorLanguage(textarea) {
+    const title = document.title.toLowerCase();
+    const iframeSrc = document.querySelector("#ifmExpressie")?.getAttribute("src") || "";
+    const value = textarea.value || "";
+
+    if (title.includes("c#") || iframeSrc.includes("Programmeertaal=2")) {
+      return "csharp";
+    }
+
+    if (title.includes("powershell") || value.includes("$")) {
+      return "powershell";
+    }
+
+    return "powershell";
+  }
+
+  function closeAutocomplete() {
+    if (autocompleteState.panel) {
+      autocompleteState.panel.remove();
+    }
+
+    autocompleteState.panel = null;
+    autocompleteState.textarea = null;
+    autocompleteState.items = [];
+    autocompleteState.selectedIndex = 0;
+  }
+
+  function getPrefixInfo(value, cursorPos) {
+    let start = cursorPos;
+
+    while (start > 0 && /[A-Za-z0-9_$]/.test(value[start - 1])) {
+      start -= 1;
+    }
+
+    return {
+      start,
+      end: cursorPos,
+      prefix: value.slice(start, cursorPos)
+    };
+  }
+
+  function getSuggestions(prefix, language) {
+    const source = language === "csharp" ? csharpSuggestions : powershellSuggestions;
+    const normalizedPrefix = prefix.toLowerCase();
+
+    if (!normalizedPrefix) {
+      return source.slice(0, 12);
+    }
+
+    return source
+      .filter((item) => item.toLowerCase().startsWith(normalizedPrefix))
+      .slice(0, 12);
+  }
+
+  function insertSuggestion(textarea, suggestion) {
+    const value = textarea.value;
+    const before = value.slice(0, autocompleteState.prefixStart);
+    const after = value.slice(autocompleteState.prefixEnd);
+
+    textarea.value = `${before}${suggestion}${after}`;
+
+    const newPos = before.length + suggestion.length;
+    textarea.setSelectionRange(newPos, newPos);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+    closeAutocomplete();
+    textarea.focus();
+  }
+
+  function highlightSelectedSuggestion() {
+    if (!autocompleteState.panel) return;
+
+    autocompleteState.panel
+      .querySelectorAll("button")
+      .forEach((button, index) => button.classList.toggle("do-intellisense-active", index === autocompleteState.selectedIndex));
+  }
+
+  function openAutocomplete(textarea, suggestions, prefixInfo) {
+    closeAutocomplete();
+
+    const panel = document.createElement("div");
+    panel.id = "do-intellisense-panel";
+
+    suggestions.forEach((suggestion, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "do-intellisense-item";
+      button.textContent = suggestion;
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        insertSuggestion(textarea, suggestion);
+      });
+      panel.appendChild(button);
+
+      if (index === 0) {
+        button.classList.add("do-intellisense-active");
+      }
+    });
+
+    document.body.appendChild(panel);
+
+    const rect = textarea.getBoundingClientRect();
+    panel.style.left = `${window.scrollX + rect.left}px`;
+    panel.style.top = `${window.scrollY + rect.bottom + 4}px`;
+
+    autocompleteState.panel = panel;
+    autocompleteState.textarea = textarea;
+    autocompleteState.items = suggestions;
+    autocompleteState.selectedIndex = 0;
+    autocompleteState.prefixStart = prefixInfo.start;
+    autocompleteState.prefixEnd = prefixInfo.end;
+  }
+
+  function triggerAutocomplete(textarea, force = false) {
+    const selectionStart = textarea.selectionStart || 0;
+    const prefixInfo = getPrefixInfo(textarea.value, selectionStart);
+
+    if (!force && !prefixInfo.prefix) {
+      closeAutocomplete();
+      return;
+    }
+
+    const language = getEditorLanguage(textarea);
+    const suggestions = getSuggestions(prefixInfo.prefix, language);
+
+    if (!suggestions.length) {
+      closeAutocomplete();
+      return;
+    }
+
+    openAutocomplete(textarea, suggestions, prefixInfo);
+  }
+
+  function isAutocompleteTarget(target) {
+    return target instanceof HTMLTextAreaElement && (
+      target.id.includes("Expressie") ||
+      target.id.includes("txtCode") ||
+      target.classList.contains("triggerSaveButtons")
+    );
+  }
+
+  function handleAutocompleteKeydown(event) {
+    const target = event.target;
+    if (!isAutocompleteTarget(target)) return;
+
+    if (event.ctrlKey && event.code === "Space") {
+      event.preventDefault();
+      triggerAutocomplete(target, true);
+      return;
+    }
+
+    if (event.key === ".") {
+      setTimeout(() => triggerAutocomplete(target, true), 0);
+      return;
+    }
+
+    if (!autocompleteState.panel || autocompleteState.textarea !== target) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      autocompleteState.selectedIndex = (autocompleteState.selectedIndex + 1) % autocompleteState.items.length;
+      highlightSelectedSuggestion();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      autocompleteState.selectedIndex =
+        (autocompleteState.selectedIndex - 1 + autocompleteState.items.length) % autocompleteState.items.length;
+      highlightSelectedSuggestion();
+    } else if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      const selected = autocompleteState.items[autocompleteState.selectedIndex];
+      if (selected) {
+        insertSuggestion(target, selected);
+      }
+    } else if (event.key === "Escape") {
+      closeAutocomplete();
+    } else if (event.key.length === 1 || event.key === "Backspace") {
+      setTimeout(() => triggerAutocomplete(target, true), 0);
+    }
+  }
+
+  function enableEditorAutocomplete() {
+    document.addEventListener("keydown", handleAutocompleteKeydown, true);
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      const insidePanel = target instanceof Element && target.closest("#do-intellisense-panel");
+      if (!insidePanel && target !== autocompleteState.textarea) {
+        closeAutocomplete();
+      }
+    });
+
+    document.addEventListener("scroll", () => {
+      if (!autocompleteState.panel || !autocompleteState.textarea) return;
+      const rect = autocompleteState.textarea.getBoundingClientRect();
+      autocompleteState.panel.style.left = `${window.scrollX + rect.left}px`;
+      autocompleteState.panel.style.top = `${window.scrollY + rect.bottom + 4}px`;
+    }, true);
+  }
+
   function observeDom() {
     const observer = new MutationObserver((mutations) => {
       const relevantMutation = mutations.some((mutation) => {
@@ -349,6 +603,7 @@
   function init() {
     enableRowTracking();
     observeDom();
+    enableEditorAutocomplete();
     scheduleEnsureButton();
   }
 

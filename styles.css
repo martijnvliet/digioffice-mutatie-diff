@@ -131,3 +131,33 @@
   margin-top: 20px;
   padding: 8px 12px;
 }
+
+#do-intellisense-panel {
+  position: absolute;
+  z-index: 11000;
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #c8d2e3;
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(20, 33, 61, 0.18);
+}
+
+.do-intellisense-item {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  color: #17365d;
+}
+
+.do-intellisense-item:hover,
+.do-intellisense-item.do-intellisense-active {
+  background: #e7eef8;
+}
