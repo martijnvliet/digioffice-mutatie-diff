@@ -1,0 +1,163 @@
+
+#do-compare-slot {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  margin-top: -4px;
+  margin-right: 0;
+}
+
+#do-compare-btn {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0;
+  padding: 8px 12px;
+  background: #2f4f79;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+#do-compare-btn:hover {
+  background: #29466c;
+}
+
+.table-legend-row > div:last-child {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+  gap: 8px;
+}
+
+#do-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.do-modal {
+  background: white;
+  width: 1100px;
+  max-height: 90vh;
+  overflow: auto;
+  padding: 20px;
+  border-radius: 6px;
+}
+
+.do-header {
+  position: sticky;
+  top: 0;
+  background: white;
+  padding-bottom: 8px;
+}
+
+.do-legend span {
+  margin-right: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.legend-added {
+  background: #e6ffed;
+}
+
+.legend-removed {
+  background: #ffeef0;
+}
+
+.do-field-title {
+  font-weight: bold;
+  margin: 6px 0;
+}
+
+.do-columns {
+  display: flex;
+  max-height: 65vh;
+  overflow: hidden;
+  gap: 20px;
+}
+
+.do-old,
+.do-new {
+  flex: 1;
+  overflow-y: auto;
+  background: #f8f8f8;
+  padding: 10px;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  white-space: pre;
+  line-height: 1.45;
+}
+
+.ln {
+  width: 48px;
+  min-width: 48px;
+  display: inline-block;
+  text-align: right;
+  padding-right: 10px;
+  color: #888;
+  user-select: none;
+}
+
+.diff-added {
+  background: #e6ffed;
+}
+
+.diff-removed {
+  background: #ffeef0;
+}
+
+.wdiff-added {
+  background: #acf2bd;
+}
+
+.wdiff-removed {
+  background: #fdb8c0;
+}
+
+.do-selected {
+  outline: 2px solid #2f4f79;
+}
+
+#do-close {
+  margin-top: 20px;
+  padding: 8px 12px;
+}
+
+#do-intellisense-panel {
+  position: absolute;
+  z-index: 11000;
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #c8d2e3;
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(20, 33, 61, 0.18);
+}
+
+.do-intellisense-item {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  color: #17365d;
+}
+
+.do-intellisense-item:hover,
+.do-intellisense-item.do-intellisense-active {
+  background: #e7eef8;
+}
