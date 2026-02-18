@@ -17,6 +17,18 @@
     return container.querySelector(".table-data table");
   }
 
+
+  function getLegendRow(container) {
+    if (!container) return null;
+
+    const directPrev = container.previousElementSibling;
+    if (directPrev?.classList.contains("table-legend-row")) {
+      return directPrev;
+    }
+
+    return container.parentElement?.querySelector(".table-legend-row") || null;
+  }
+
   function getRefreshAnchor(container) {
     if (!container) return null;
 
@@ -34,34 +46,43 @@
 
   function mountCompareButton(btn, container) {
     const refreshAnchor = getRefreshAnchor(container);
+    const legendRow = getLegendRow(container);
 
-    if (refreshAnchor) {
-      const controlGroup =
-        refreshAnchor.closest(".btn-group,.toolbar,.tools,.actions,div,li") ||
-        refreshAnchor.parentElement;
-      const slotParent = controlGroup?.parentElement;
-
-      if (slotParent) {
-        let slot = slotParent.querySelector("#do-compare-slot");
-
-        if (!slot) {
-          slot = document.createElement("div");
-          slot.id = "do-compare-slot";
-          slotParent.insertBefore(slot, controlGroup.nextSibling);
-        }
-
-        if (btn.parentElement !== slot) {
-          slot.appendChild(btn);
-        }
-        return;
-      }
-    }
-
-    let slot = container.querySelector("#do-compare-slot");
+    let slot = document.getElementById("do-compare-slot");
     if (!slot) {
       slot = document.createElement("div");
       slot.id = "do-compare-slot";
-      container.appendChild(slot);
+    }
+
+    if (legendRow?.parentElement) {
+      if (slot.parentElement !== legendRow.parentElement) {
+        legendRow.parentElement.insertBefore(slot, legendRow.nextSibling);
+      }
+
+      if (btn.parentElement !== slot) {
+        slot.appendChild(btn);
+      }
+      return;
+    }
+
+    if (refreshAnchor) {
+      const controlGroup =
+        refreshAnchor.closest(".menu,.btn-group,.toolbar,.tools,.actions,div,li") ||
+        refreshAnchor.parentElement;
+      const slotParent = controlGroup?.parentElement || container;
+
+      if (slot.parentElement !== slotParent) {
+        slotParent.insertBefore(slot, controlGroup ? controlGroup.nextSibling : slotParent.firstChild);
+      }
+
+      if (btn.parentElement !== slot) {
+        slot.appendChild(btn);
+      }
+      return;
+    }
+
+    if (slot.parentElement !== container) {
+      container.insertBefore(slot, container.firstChild);
     }
 
     if (btn.parentElement !== slot) {
@@ -133,7 +154,7 @@
           return;
         }
 
-        const row = clickTarget.closest(".table-data tbody tr");
+        const row = clickTarget.closest(".table-data tbody tr[id][vi]");
         if (!row || !row.querySelector("td")) return;
 
         if (!e.ctrlKey) {

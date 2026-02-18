@@ -2,7 +2,8 @@
 #do-compare-slot {
   display: flex;
   justify-content: flex-end;
-  margin-top: 8px;
+  margin-top: 6px;
+  margin-bottom: 4px;
 }
 
 #do-compare-btn {
