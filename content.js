@@ -61,8 +61,16 @@
       const menuRoot = rightControls?.querySelector("ul.menu, .menu") || null;
 
       if (rightControls) {
-        if (slot.parentElement !== rightControls) {
-          rightControls.insertBefore(slot, menuRoot || rightControls.firstChild);
+        if (menuRoot?.parentElement === rightControls) {
+          if (slot.parentElement !== rightControls) {
+            rightControls.insertBefore(slot, menuRoot.nextSibling);
+          }
+
+          if (slot.previousElementSibling !== menuRoot) {
+            rightControls.insertBefore(slot, menuRoot.nextSibling);
+          }
+        } else if (slot.parentElement !== rightControls) {
+          rightControls.appendChild(slot);
         }
 
         if (btn.parentElement !== slot) {
