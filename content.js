@@ -185,6 +185,44 @@
     return Array.from(selectedRows);
   }
 
+
+  function normalizeGridText(value) {
+    if (!value) return "";
+
+    let text = decodeHtml(value).replace(/\u00a0/g, " ").trim();
+
+    if (!text.includes("\n") && /\\r\\n|\\n|\\r/.test(text)) {
+      text = text
+        .replace(/\\r\\n/g, "\n")
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\n");
+    }
+
+    return text;
+  }
+
+  function getCellValue(row, col) {
+    const td = row.querySelector(`td[col="${col}"]`);
+    if (!td) return "";
+
+    const span = td.querySelector("span");
+    const candidates = [
+      span?.getAttribute("title"),
+      td.getAttribute("title"),
+      span?.textContent,
+      td.textContent
+    ]
+      .map(normalizeGridText)
+      .filter(Boolean);
+
+    if (!candidates.length) return "";
+
+    const multiline = candidates.find((candidate) => candidate.includes("\n"));
+    if (multiline) return multiline;
+
+    return candidates.sort((a, b) => b.length - a.length)[0];
+  }
+
   function renderFormattedDiff(oldText, newText) {
     const oldFormatted = smartFormat(decodeHtml(oldText || ""));
     const newFormatted = smartFormat(decodeHtml(newText || ""));
@@ -214,9 +252,9 @@
 `;
 
     rows.forEach((row) => {
-      const veld = row.querySelector('td[col="6"] span')?.innerText ?? "";
-      const oud = row.querySelector('td[col="7"] span')?.innerText ?? "";
-      const nieuw = row.querySelector('td[col="8"] span')?.innerText ?? "";
+      const veld = getCellValue(row, 6);
+      const oud = getCellValue(row, 7);
+      const nieuw = getCellValue(row, 8);
 
       const diff = renderFormattedDiff(oud, nieuw);
 
