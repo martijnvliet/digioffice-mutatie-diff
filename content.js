@@ -149,6 +149,14 @@
         const gridContainer = getGridContainer();
         const clickTarget = e.target instanceof Node ? e.target : null;
 
+        const ignoreClearTarget =
+          clickTarget instanceof Element &&
+          clickTarget.closest("#do-compare-btn, #do-compare-slot, #do-overlay");
+
+        if (ignoreClearTarget) {
+          return;
+        }
+
         if (!gridContainer || !clickTarget || !gridContainer.contains(clickTarget)) {
           clearSelection();
           return;
