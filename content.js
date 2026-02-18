@@ -54,9 +54,25 @@
       slot.id = "do-compare-slot";
     }
 
-    if (legendRow?.parentElement) {
-      if (slot.parentElement !== legendRow.parentElement) {
-        legendRow.parentElement.insertBefore(slot, legendRow.nextSibling);
+    if (legendRow) {
+      const rightControls = legendRow.lastElementChild instanceof Element
+        ? legendRow.lastElementChild
+        : null;
+      const menuRoot = rightControls?.querySelector("ul.menu, .menu") || null;
+
+      if (rightControls) {
+        if (slot.parentElement !== rightControls) {
+          rightControls.insertBefore(slot, menuRoot || rightControls.firstChild);
+        }
+
+        if (btn.parentElement !== slot) {
+          slot.appendChild(btn);
+        }
+        return;
+      }
+
+      if (legendRow.parentElement && slot.parentElement !== legendRow.parentElement) {
+        legendRow.parentElement.insertBefore(slot, legendRow);
       }
 
       if (btn.parentElement !== slot) {
@@ -72,7 +88,7 @@
       const slotParent = controlGroup?.parentElement || container;
 
       if (slot.parentElement !== slotParent) {
-        slotParent.insertBefore(slot, controlGroup ? controlGroup.nextSibling : slotParent.firstChild);
+        slotParent.insertBefore(slot, controlGroup || slotParent.firstChild);
       }
 
       if (btn.parentElement !== slot) {
