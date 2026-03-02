@@ -36,6 +36,7 @@
 .do-modal {
   display: flex;
   flex-direction: column;
+  flex-direction: column;
   width: 80vw;
   height: 80vh;
   min-width: 600px;
@@ -120,8 +121,13 @@
 
 .do-old,
 .do-new {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 52vh;
   overflow-y: auto;
+  overflow-x: scroll;
+  scrollbar-gutter: stable both-edges;
+  box-sizing: border-box;
   background: #f8f8f8;
   padding: 10px;
   font-family: Consolas, monospace;
