@@ -1,18 +1,23 @@
 {
   "manifest_version": 3,
   "name": "DigiOffice Mutatie Diff",
-  "version": "1.0",
+  "version": "1.0.0",
   "description": "Vergelijk mutaties in DigiOffice.",
-  "permissions": [],
-  "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "*://*/*"
+      ],
       "js": ["diff.js", "content.js"],
       "css": ["styles.css"],
       "run_at": "document_idle",
       "all_frames": true,
       "match_about_blank": true
     }
-  ]
+  ],
+  "icons": {
+    "16": "Icons/icon16.png",
+    "48": "Icons/icon48.png",
+    "128": "Icons/icon128.png"
+  }
 }
