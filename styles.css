@@ -120,12 +120,8 @@
 
 .do-old,
 .do-new {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1;
   overflow-y: auto;
-  overflow-x: scroll;
-  scrollbar-gutter: stable both-edges;
-  box-sizing: border-box;
   background: #f8f8f8;
   padding: 10px;
   font-family: Consolas, monospace;
