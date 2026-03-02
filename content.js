@@ -16,131 +16,7 @@
     if (!container) return null;
     return container.querySelector(".table-data table");
   }
-
-
-  function getLegendRow(container) {
-    if (!container) return null;
-
-    const directPrev = container.previousElementSibling;
-    if (directPrev?.classList.contains("table-legend-row")) {
-      return directPrev;
-    }
-
-    return container.parentElement?.querySelector(".table-legend-row") || null;
-  }
-
-  function getRefreshAnchor(container) {
-    if (!container) return null;
-
-    return container.querySelector(
-      [
-        "[title*=\"refresh\" i]",
-        "[aria-label*=\"refresh\" i]",
-        "[class*=\"refresh\" i]",
-        ".fa-refresh",
-        ".fa-sync",
-        ".fa-rotate-right"
-      ].join(",")
-    );
-  }
-
-  function mountCompareButton(btn, container) {
-    const refreshAnchor = getRefreshAnchor(container);
-    const legendRow = getLegendRow(container);
-
-    let slot = document.getElementById("do-compare-slot");
-    if (!slot) {
-      slot = document.createElement("div");
-      slot.id = "do-compare-slot";
-    }
-
-    if (legendRow) {
-      const rightControls = legendRow.lastElementChild instanceof Element
-        ? legendRow.lastElementChild
-        : null;
-      const menuRoot = rightControls?.querySelector("ul.menu, .menu") || null;
-
-      if (rightControls) {
-        if (menuRoot?.parentElement === rightControls) {
-          if (slot.parentElement !== rightControls) {
-            rightControls.insertBefore(slot, menuRoot.nextSibling);
-          }
-
-          if (slot.previousElementSibling !== menuRoot) {
-            rightControls.insertBefore(slot, menuRoot.nextSibling);
-          }
-        } else if (slot.parentElement !== rightControls) {
-          rightControls.appendChild(slot);
-        }
-
-        if (btn.parentElement !== slot) {
-          slot.appendChild(btn);
-        }
-        return;
-      }
-
-      if (legendRow.parentElement && slot.parentElement !== legendRow.parentElement) {
-        legendRow.parentElement.insertBefore(slot, legendRow);
-      }
-
-      if (btn.parentElement !== slot) {
-        slot.appendChild(btn);
-      }
-      return;
-    }
-
-    if (refreshAnchor) {
-      const controlGroup =
-        refreshAnchor.closest(".menu,.btn-group,.toolbar,.tools,.actions,div,li") ||
-        refreshAnchor.parentElement;
-      const slotParent = controlGroup?.parentElement || container;
-
-      if (slot.parentElement !== slotParent) {
-        slotParent.insertBefore(slot, controlGroup || slotParent.firstChild);
-      }
-
-      if (btn.parentElement !== slot) {
-        slot.appendChild(btn);
-      }
-      return;
-    }
-
-    if (slot.parentElement !== container) {
-      container.insertBefore(slot, container.firstChild);
-    }
-
-    if (btn.parentElement !== slot) {
-      slot.appendChild(btn);
-    }
-  }
-
-  function ensureButton() {
-    const grid = getGrid();
-    const container = getGridContainer();
-    const existingBtn = document.getElementById("do-compare-btn");
-    const existingSlot = document.getElementById("do-compare-slot");
-
-    if (!grid || !container) {
-      if (existingBtn) existingBtn.remove();
-      if (existingSlot) existingSlot.remove();
-      clearSelection();
-      return;
-    }
-
-    if (existingBtn) {
-      mountCompareButton(existingBtn, container);
-      return;
-    }
-
-    const btn = document.createElement("button");
-    btn.id = "do-compare-btn";
-    btn.type = "button";
-    btn.innerText = "Vergelijk mutaties";
-    btn.onclick = openComparison;
-
-    mountCompareButton(btn, container);
-  }
-
+  
   function smartFormat(text) {
     if (!text) return "";
 
@@ -157,13 +33,17 @@
 
     xml.split("\n").forEach((line) => {
       if (line.match(/^<\/.+/)) indent--;
-
       formatted += `${"  ".repeat(Math.max(indent, 0))}${line}\n`;
-
       if (line.match(/^<[^!?/].*[^/]>$/)) indent++;
     });
 
     return formatted.trim();
+  }
+
+  function renderFormattedDiff(oldText, newText) {
+    const oldFormatted = smartFormat(decodeHtml(oldText || "")).trimEnd();
+    const newFormatted = smartFormat(decodeHtml(newText || "")).trimEnd();
+    return renderDiff(oldFormatted, newFormatted);
   }
 
   function enableRowTracking() {
@@ -175,23 +55,27 @@
 
         const ignoreClearTarget =
           clickTarget instanceof Element &&
-          clickTarget.closest("#do-compare-btn, #do-compare-slot, #do-overlay");
+          clickTarget.closest(
+            "#do-compare-btn, #do-compare-slot, #do-overlay"
+          );
 
-        if (ignoreClearTarget) {
-          return;
-        }
+        if (ignoreClearTarget) return;
 
-        if (!gridContainer || !clickTarget || !gridContainer.contains(clickTarget)) {
+        if (
+          !gridContainer ||
+          !clickTarget ||
+          !gridContainer.contains(clickTarget)
+        ) {
           clearSelection();
           return;
         }
 
-        const row = clickTarget.closest(".table-data tbody tr[id][vi]");
+        const row = clickTarget.closest(
+          ".table-data tbody tr[id][vi]"
+        );
         if (!row || !row.querySelector("td")) return;
 
-        if (!e.ctrlKey) {
-          clearSelection();
-        }
+        if (!e.ctrlKey) clearSelection();
 
         if (selectedRows.has(row)) {
           selectedRows.delete(row);
@@ -209,11 +93,12 @@
     return Array.from(selectedRows);
   }
 
-
   function normalizeGridText(value) {
     if (!value) return "";
 
-    let text = decodeHtml(value).replace(/\u00a0/g, " ").trim();
+    let text = decodeHtml(value)
+      .replace(/\u00a0/g, " ")
+      .trim();
 
     if (!text.includes("\n") && /\\r\\n|\\n|\\r/.test(text)) {
       text = text
@@ -230,6 +115,7 @@
     if (!td) return "";
 
     const span = td.querySelector("span");
+
     const candidates = [
       span?.getAttribute("title"),
       td.getAttribute("title"),
@@ -241,350 +127,242 @@
 
     if (!candidates.length) return "";
 
-    const multiline = candidates.find((candidate) => candidate.includes("\n"));
+    const multiline = candidates.find((candidate) =>
+      candidate.includes("\n")
+    );
+
     if (multiline) return multiline;
 
     return candidates.sort((a, b) => b.length - a.length)[0];
   }
 
-  function renderFormattedDiff(oldText, newText) {
-    const oldFormatted = smartFormat(decodeHtml(oldText || ""));
-    const newFormatted = smartFormat(decodeHtml(newText || ""));
-    return renderDiff(oldFormatted, newFormatted);
+  function openComparison() {
+  const rows = getSelectedRows();
+
+  if (!rows.length) {
+    alert("Selecteer minimaal één mutatieregel.");
+    return;
   }
 
-  function openComparison() {
-    const rows = getSelectedRows();
+  const overlay = document.createElement("div");
+  overlay.id = "do-overlay";
 
-    if (!rows.length) {
-      alert("Selecteer minimaal één mutatieregel.");
-      return;
-    }
-
-    const overlay = document.createElement("div");
-    overlay.id = "do-overlay";
-
-    let html = `
+  let html = `
 <div class="do-modal">
   <div class="do-header">
     <h2>Mutatievergelijking</h2>
-    <div class="do-legend">
-      <span class="legend-added">toegevoegd</span>
-      <span class="legend-removed">verwijderd</span>
-    </div>
   </div>
+
+  <div class="do-content">
 `;
 
-    rows.forEach((row) => {
-      const veld = getCellValue(row, 6);
-      const oud = getCellValue(row, 7);
-      const nieuw = getCellValue(row, 8);
+rows.forEach((row) => {
 
-      const diff = renderFormattedDiff(oud, nieuw);
+  const veld = getCellValue(row, 6);
+  const oud = getCellValue(row, 7);
+  const nieuw = getCellValue(row, 8);
 
-      html += `
-<div>
-  <div class="do-field-title">${escapeHtml(veld)}</div>
-  <div class="do-columns">
-    <div class="do-old">${diff.left}</div>
-    <div class="do-new">${diff.right}</div>
+  const diff = renderFormattedDiff(oud, nieuw);
+
+  html += `
+  <div class="do-field-block">
+    <div class="do-field-title">${escapeHtml(veld)}</div>
+
+    <div class="do-columns">
+      <div class="do-col">
+        <div class="do-col-header">
+          <button class="do-copy-btn" data-copy="old" title="Kopieer oude tekst">
+            <i class="fa-solid fa-copy"></i>
+            <span class="btn-label">Oud</span>
+          </button>
+        </div>
+        <div class="do-old">${diff.left}</div>
+      </div>
+
+      <div class="do-col">
+        <div class="do-col-header">
+          <button class="do-copy-btn" data-copy="new" title="Kopieer nieuwe tekst">
+            <i class="fa-solid fa-copy"></i>
+            <span class="btn-label">Nieuw</span>
+          </button>
+        </div>
+        <div class="do-new">${diff.right}</div>
+      </div>
+    </div>
+  </div>
+  `;
+});
+
+// ✅ NU pas afsluiten
+html += `
+  </div>
+
+  <div class="do-footer">
+    <button id="do-close" type="button" class="do-close-btn">
+      Sluiten
+    </button>
   </div>
 </div>`;
+
+
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay);
+
+  document.getElementById("do-close").onclick = () =>
+    overlay.remove();
+
+  // === SCROLL SYNC ===
+  const olds = overlay.querySelectorAll(".do-old");
+  const news = overlay.querySelectorAll(".do-new");
+
+  olds.forEach((oldCol, i) => {
+    const newCol = news[i];
+    let isSyncing = false;
+
+    oldCol.addEventListener("scroll", () => {
+      if (isSyncing) return;
+      isSyncing = true;
+      newCol.scrollTop = oldCol.scrollTop;
+      newCol.scrollLeft = oldCol.scrollLeft;
+      isSyncing = false;
     });
 
-    html += '<button id="do-close" type="button">Sluiten</button></div>';
-
-    overlay.innerHTML = html;
-    document.body.appendChild(overlay);
-
-    document.getElementById("do-close").onclick = () => overlay.remove();
-
-    const olds = overlay.querySelectorAll(".do-old");
-    const news = overlay.querySelectorAll(".do-new");
-
-    olds.forEach((oldCol, i) => {
-      const newCol = news[i];
-
-      oldCol.addEventListener("scroll", () => {
-        newCol.scrollTop = oldCol.scrollTop;
-      });
-
-      newCol.addEventListener("scroll", () => {
-        oldCol.scrollTop = newCol.scrollTop;
-      });
+    newCol.addEventListener("scroll", () => {
+      if (isSyncing) return;
+      isSyncing = true;
+      oldCol.scrollTop = newCol.scrollTop;
+      oldCol.scrollLeft = newCol.scrollLeft;
+      isSyncing = false;
     });
-  }
+  });
+
+	  // === COPY BUTTONS ===
+	overlay.querySelectorAll(".do-copy-btn").forEach(btn => {
+
+	  btn.addEventListener("click", async () => {
+
+		const isOld = btn.dataset.copy === "old";
+		const container = btn.closest(".do-col")
+							 .querySelector(isOld ? ".do-old" : ".do-new");
+
+		const text = extractPlainText(container);
+
+		try {
+		  await navigator.clipboard.writeText(text);
+
+		  // Bewaar originele tekst
+		  const originalLabel = isOld ? "Oud" : "Nieuw";
+
+		  // Zet check-icoon
+		  btn.innerHTML = `
+			<i class="fa-solid fa-check"></i>
+			Gekopieerd
+		  `;
+
+		  btn.classList.add("copied");
+
+		  setTimeout(() => {
+			btn.innerHTML = `
+			  <i class="fa-solid fa-copy"></i>
+			  ${originalLabel}
+			`;
+			btn.classList.remove("copied");
+		  }, 1500);
+
+		} catch (err) {
+		  console.error("Clipboard error:", err);
+		}
+
+	  });
+
+	});
+
+  autoAdjustColumnWidth(overlay);
+}
 
 
-  const csharpSuggestions = [
-    "using",
-    "namespace",
-    "public",
-    "private",
-    "class",
-    "void",
-    "var",
-    "new",
-    "return",
-    "if",
-    "else",
-    "foreach",
-    "WSWerkstroomEntity",
-    "WSProcesEntity",
-    "BouwInkoopContractEntity",
-    "EntityTools",
-    "MetaDataFields",
-    "GetMetaDataField",
-    "RegistrationValue"
-  ];
+	function extractPlainText(container) {
+	  const lines = [];
 
-  const powershellSuggestions = [
-    "$Document",
-    "$docinfo",
-    "$CurrentDocInfo",
-    "$usercontrol",
-    "$EntityTools",
-    "$null",
-    "$true",
-    "$false",
-    "if",
-    "else",
-    "foreach",
-    "-eq",
-    "-ne",
-    "-and",
-    "-or",
-    "-not",
-    "GetMetaDataField",
-    "RegistrationValue"
-  ];
+	  container.querySelectorAll("div").forEach(div => {
+		const clone = div.cloneNode(true);
 
-  const autocompleteState = {
-    panel: null,
-    textarea: null,
-    items: [],
-    selectedIndex: 0,
-    prefixStart: 0,
-    prefixEnd: 0
-  };
+		// verwijder line number
+		const ln = clone.querySelector(".ln");
+		if (ln) ln.remove();
 
-  function getEditorLanguage(textarea) {
-    const title = document.title.toLowerCase();
-    const iframeSrc = document.querySelector("#ifmExpressie")?.getAttribute("src") || "";
-    const value = textarea.value || "";
+		lines.push(clone.innerText);
+	  });
 
-    if (title.includes("c#") || iframeSrc.includes("Programmeertaal=2")) {
-      return "csharp";
-    }
+	  return lines.join("\n");
+	}
+	  
+  function autoAdjustColumnWidth(overlay) {
+	  const columns = overlay.querySelectorAll(".do-old, .do-new");
 
-    if (title.includes("powershell") || value.includes("$")) {
-      return "powershell";
-    }
+	  columns.forEach(col => {
+		const lines = col.querySelectorAll("div");
+		let maxWidth = 0;
 
-    return "powershell";
-  }
+		lines.forEach(line => {
+		  const clone = line.cloneNode(true);
+		  clone.style.position = "absolute";
+		  clone.style.visibility = "hidden";
+		  clone.style.whiteSpace = "pre";
+		  clone.style.width = "auto";
+		  document.body.appendChild(clone);
 
-  function closeAutocomplete() {
-    if (autocompleteState.panel) {
-      autocompleteState.panel.remove();
-    }
+		  const width = clone.scrollWidth;
+		  document.body.removeChild(clone);
 
-    autocompleteState.panel = null;
-    autocompleteState.textarea = null;
-    autocompleteState.items = [];
-    autocompleteState.selectedIndex = 0;
-  }
+		  if (width > maxWidth) {
+			maxWidth = width;
+		  }
+		});
 
-  function getPrefixInfo(value, cursorPos) {
-    let start = cursorPos;
+		const currentWidth = col.clientWidth;
 
-    while (start > 0 && /[A-Za-z0-9_$]/.test(value[start - 1])) {
-      start -= 1;
-    }
+		if (maxWidth > currentWidth) {
+		  // force smaller basis so overflow zichtbaar wordt
+		  col.style.flex = "0 0 " + currentWidth + "px";
+		} else {
+		  col.style.flex = "1";
+		}
+	  });
+	}
 
-    return {
-      start,
-      end: cursorPos,
-      prefix: value.slice(start, cursorPos)
-    };
-  }
 
-  function getSuggestions(prefix, language) {
-    const source = language === "csharp" ? csharpSuggestions : powershellSuggestions;
-    const normalizedPrefix = prefix.toLowerCase();
+	function ensureButton() {
+	  const grid = getGrid();
+	  const container = getGridContainer();
+	  const existingBtn = document.getElementById("do-compare-btn");
 
-    if (!normalizedPrefix) {
-      return source.slice(0, 12);
-    }
+	  if (!grid || !container) return;
 
-    return source
-      .filter((item) => item.toLowerCase().startsWith(normalizedPrefix))
-      .slice(0, 12);
-  }
+	  if (existingBtn) return;
 
-  function insertSuggestion(textarea, suggestion) {
-    const value = textarea.value;
-    const before = value.slice(0, autocompleteState.prefixStart);
-    const after = value.slice(autocompleteState.prefixEnd);
+	  const legendRow = container.parentElement?.querySelector(".table-legend-row");
+	  const menuRight = legendRow?.querySelector(".menu-right");
 
-    textarea.value = `${before}${suggestion}${after}`;
+	  const btn = document.createElement("button");
+	  btn.id = "do-compare-btn";
+	  btn.type = "button";
+	  btn.innerText = "Vergelijk mutaties";
+	  btn.onclick = openComparison;
 
-    const newPos = before.length + suggestion.length;
-    textarea.setSelectionRange(newPos, newPos);
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
-
-    closeAutocomplete();
-    textarea.focus();
-  }
-
-  function highlightSelectedSuggestion() {
-    if (!autocompleteState.panel) return;
-
-    autocompleteState.panel
-      .querySelectorAll("button")
-      .forEach((button, index) => button.classList.toggle("do-intellisense-active", index === autocompleteState.selectedIndex));
-  }
-
-  function openAutocomplete(textarea, suggestions, prefixInfo) {
-    closeAutocomplete();
-
-    const panel = document.createElement("div");
-    panel.id = "do-intellisense-panel";
-
-    suggestions.forEach((suggestion, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "do-intellisense-item";
-      button.textContent = suggestion;
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        insertSuggestion(textarea, suggestion);
-      });
-      panel.appendChild(button);
-
-      if (index === 0) {
-        button.classList.add("do-intellisense-active");
-      }
-    });
-
-    document.body.appendChild(panel);
-
-    const rect = textarea.getBoundingClientRect();
-    panel.style.left = `${window.scrollX + rect.left}px`;
-    panel.style.top = `${window.scrollY + rect.bottom + 4}px`;
-
-    autocompleteState.panel = panel;
-    autocompleteState.textarea = textarea;
-    autocompleteState.items = suggestions;
-    autocompleteState.selectedIndex = 0;
-    autocompleteState.prefixStart = prefixInfo.start;
-    autocompleteState.prefixEnd = prefixInfo.end;
-  }
-
-  function triggerAutocomplete(textarea, force = false) {
-    const selectionStart = textarea.selectionStart || 0;
-    const prefixInfo = getPrefixInfo(textarea.value, selectionStart);
-
-    if (!force && !prefixInfo.prefix) {
-      closeAutocomplete();
-      return;
-    }
-
-    const language = getEditorLanguage(textarea);
-    const suggestions = getSuggestions(prefixInfo.prefix, language);
-
-    if (!suggestions.length) {
-      closeAutocomplete();
-      return;
-    }
-
-    openAutocomplete(textarea, suggestions, prefixInfo);
-  }
-
-  function isAutocompleteTarget(target) {
-    return target instanceof HTMLTextAreaElement && (
-      target.id.includes("Expressie") ||
-      target.id.includes("txtCode") ||
-      target.classList.contains("triggerSaveButtons")
-    );
-  }
-
-  function handleAutocompleteKeydown(event) {
-    const target = event.target;
-    if (!isAutocompleteTarget(target)) return;
-
-    if (event.ctrlKey && event.code === "Space") {
-      event.preventDefault();
-      triggerAutocomplete(target, true);
-      return;
-    }
-
-    if (event.key === ".") {
-      setTimeout(() => triggerAutocomplete(target, true), 0);
-      return;
-    }
-
-    if (!autocompleteState.panel || autocompleteState.textarea !== target) {
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      autocompleteState.selectedIndex = (autocompleteState.selectedIndex + 1) % autocompleteState.items.length;
-      highlightSelectedSuggestion();
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      autocompleteState.selectedIndex =
-        (autocompleteState.selectedIndex - 1 + autocompleteState.items.length) % autocompleteState.items.length;
-      highlightSelectedSuggestion();
-    } else if (event.key === "Enter" || event.key === "Tab") {
-      event.preventDefault();
-      const selected = autocompleteState.items[autocompleteState.selectedIndex];
-      if (selected) {
-        insertSuggestion(target, selected);
-      }
-    } else if (event.key === "Escape") {
-      closeAutocomplete();
-    } else if (event.key.length === 1 || event.key === "Backspace") {
-      setTimeout(() => triggerAutocomplete(target, true), 0);
-    }
-  }
-
-  function enableEditorAutocomplete() {
-    document.addEventListener("keydown", handleAutocompleteKeydown, true);
-
-    document.addEventListener("click", (event) => {
-      const target = event.target;
-      const insidePanel = target instanceof Element && target.closest("#do-intellisense-panel");
-      if (!insidePanel && target !== autocompleteState.textarea) {
-        closeAutocomplete();
-      }
-    });
-
-    document.addEventListener("scroll", () => {
-      if (!autocompleteState.panel || !autocompleteState.textarea) return;
-      const rect = autocompleteState.textarea.getBoundingClientRect();
-      autocompleteState.panel.style.left = `${window.scrollX + rect.left}px`;
-      autocompleteState.panel.style.top = `${window.scrollY + rect.bottom + 4}px`;
-    }, true);
-  }
+	  if (menuRight) {
+		menuRight.insertBefore(btn, menuRight.firstChild);
+	  } else {
+		container.prepend(btn);
+	  }
+	}
 
   function observeDom() {
-    const observer = new MutationObserver((mutations) => {
-      const relevantMutation = mutations.some((mutation) => {
-        const target = mutation.target;
-        if (!(target instanceof Element)) return false;
-        return !target.closest("#do-overlay") && target.id !== "do-compare-btn";
-      });
-
-      if (!relevantMutation) return;
+    const observer = new MutationObserver(() => {
       scheduleEnsureButton();
     });
 
-    const root = document.body || document.documentElement;
-    if (!root) return;
-
-    observer.observe(root, {
+    observer.observe(document.body, {
       childList: true,
       subtree: true
     });
@@ -603,7 +381,6 @@
   function init() {
     enableRowTracking();
     observeDom();
-    enableEditorAutocomplete();
     scheduleEnsureButton();
   }
 
