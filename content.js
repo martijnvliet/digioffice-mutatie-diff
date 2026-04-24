@@ -367,10 +367,7 @@ html += `
 
 	  if (!grid || !container) return;
 
-	  if (existingBtn) {
-		stopObservingDom();
-		return;
-	  }
+	  if (existingBtn) return;
 
 	  const legendRow = container.parentElement?.querySelector(".table-legend-row");
 	  const menuRight = legendRow?.querySelector(".menu-right");
@@ -386,29 +383,20 @@ html += `
 	  } else {
 		container.prepend(btn);
 	  }
-
-	  stopObservingDom();
 	}
 
   function startObservingDom() {
     if (domObserver) return;
 
     domObserver = new MutationObserver(() => {
-      if (!document.getElementById("do-compare-btn")) {
-        scheduleEnsureButton();
-      }
+      if (document.getElementById("do-compare-btn")) return;
+      scheduleEnsureButton();
     });
 
     domObserver.observe(document.body, {
       childList: true,
       subtree: true
     });
-  }
-
-  function stopObservingDom() {
-    if (!domObserver) return;
-    domObserver.disconnect();
-    domObserver = null;
   }
 
   function scheduleEnsureButton() {

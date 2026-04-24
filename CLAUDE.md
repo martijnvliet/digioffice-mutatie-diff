@@ -106,8 +106,8 @@ Key responsibilities and their implementation:
 | Scroll sync | Bidirectional sync of `scrollTop`/`scrollLeft` between `.do-old` and `.do-new` using an `isSyncing` guard |
 | Copy to clipboard | `.do-copy-btn` buttons use `navigator.clipboard.writeText`; label swaps to "Gekopieerd" + checkmark for 1.5 s; `extractPlainText` strips `.ln` line-number spans |
 | Column width | `autoAdjustColumnWidth()` — clones each diff line offscreen to measure natural width; sets `flex: 0 0 <w>px` when content overflows |
-| Button injection | `ensureButton()` — inserts `#do-compare-btn` into `.menu-right` if present, else prepends to container. Calls `stopObservingDom()` once the button is in place |
-| DOM observation | `startObservingDom()` starts a `MutationObserver` on `document.body` whose callback short-circuits when the button already exists; `stopObservingDom()` disconnects it. The observer is stopped once the button has been placed to minimise host-page overhead |
+| Button injection | `ensureButton()` — inserts `#do-compare-btn` into `.menu-right` if present, else prepends to container. Safe to call repeatedly; no-op when the button already exists |
+| DOM observation | `startObservingDom()` starts a `MutationObserver` on `document.body`. The callback short-circuits with a single `getElementById` when the button already exists and otherwise calls `scheduleEnsureButton()` (rAF-batched). The observer stays active for the lifetime of the tab so the button is re-placed if DigiOffice re-renders the grid (SPA navigation, filter changes) |
 
 Execution order inside `init()`:
 1. `enableRowTracking()` — attach click listener
