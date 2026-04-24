@@ -13,6 +13,10 @@ The UI language is Dutch.
 ```
 digioffice-mutatie-diff/
 ├── manifest.json   # MV3 extension config (entry point)
+├── background.js   # Service worker: per-host permission + injection
+├── popup.html      # Toolbar popup UI
+├── popup.css       # Toolbar popup styling
+├── popup.js        # Toolbar popup logic (permission request/revoke)
 ├── diff.js         # Pure diff algorithm and HTML renderer
 ├── content.js      # DigiOffice DOM integration and modal UI
 ├── styles.css      # All extension styling
@@ -25,11 +29,42 @@ digioffice-mutatie-diff/
 
 There is no build step, no package manager, and no test framework. All files are plain vanilla JS/CSS loaded directly by the browser extension runtime.
 
+## Permission Model
+
+The extension uses an **opt-in per-host** model:
+
+- `manifest.json` declares **no static `content_scripts`**. Instead it declares `optional_host_permissions: ["*://*/*"]`, a `background` service worker, and a toolbar `action`.
+- `background.js` listens to `tabs.onUpdated` and `tabs.onActivated`. For every tab whose URL matches `/digioffice/i` it asks `chrome.permissions.contains` whether the origin is already granted.
+  - If granted → it injects `diff.js`, `content.js` and `styles.css` via `chrome.scripting` into all frames.
+  - If not granted → the toolbar action gets a `?` badge to signal availability.
+- Clicking the toolbar action opens `popup.html`, which shows the current host and either an **Activeer** or **Deactiveer** button. "Activeer" calls `chrome.permissions.request({ origins: [origin] })`; the browser's native prompt handles consent.
+- `chrome.permissions.onAdded` re-triggers injection into matching open tabs without a reload. `chrome.permissions.onRemoved` clears the badge; scripts already injected stay alive until the tab is reloaded (the popup reloads the tab on deactivate).
+
 ## File Responsibilities
 
 ### `manifest.json`
-- MV3 configuration; declares that `diff.js` and `content.js` are loaded (in that order) as content scripts on every page (`*://*/*`) at `document_idle`.
-- `all_frames: true` and `match_about_blank: true` ensure the extension works inside iframes (DigiOffice uses them).
+- MV3 configuration. No `content_scripts` block — injection is fully dynamic via `background.js`.
+- `permissions: ["scripting", "tabs"]` — needed to read tab URLs and inject code.
+- `optional_host_permissions: ["*://*/*"]` — Chrome only grants the specific origins the user approves via the popup; the broad pattern is the umbrella under which per-host grants are possible.
+- `background.service_worker = background.js`.
+- `action.default_popup = popup.html` — the toolbar icon opens the activation popup.
+
+### `background.js`
+Service worker. Responsibilities:
+- On `tabs.onUpdated` / `tabs.onActivated` → `handleTab(tab)`:
+  - Not a DigiOffice URL → clear badge.
+  - DigiOffice URL, permission granted → `inject(tab)` + clear badge + title "Actief".
+  - DigiOffice URL, no permission → show `?` badge + title "Klik om te activeren".
+- `chrome.permissions.onAdded` → inject into all matching open tabs.
+- `chrome.permissions.onRemoved` → refresh all tab badges.
+- `inject(tab)` uses `chrome.scripting.executeScript({ allFrames: true, files: ["diff.js", "content.js"] })` followed by `insertCSS` for `styles.css`.
+
+### `popup.html` / `popup.css` / `popup.js`
+Toolbar popup (280px). `popup.js`:
+- Reads the active tab, parses its URL.
+- If URL doesn't contain "digioffice" → shows an informational message, no action buttons.
+- If the origin (`protocol://host/*`) is already granted → shows **Deactiveer** button, which calls `chrome.permissions.remove` and reloads the tab.
+- Otherwise → shows **Activeer** button, which calls `chrome.permissions.request`; on success the popup closes and the background worker handles injection via `permissions.onAdded`.
 
 ### `diff.js`
 Loaded first; defines global helper functions used by `content.js`.
@@ -55,13 +90,15 @@ Diff entry types after `tryPairRemovedAdded`:
 ### `content.js`
 Wrapped in an IIFE. Manages all DigiOffice-specific logic.
 
+The IIFE first checks `window.__digiofficeMutatieDiffLoaded` and returns early if already set. This guards against double-injection when the background worker re-runs `chrome.scripting.executeScript` (e.g. on permission grant while the page is already loaded, or on service-worker restart).
+
 Key responsibilities and their implementation:
 
 | Concern | Implementation |
 |---|---|
 | Grid detection | `getGridContainer()` — `querySelector('[id$="_grdChangeLog"]')` |
 | Table detection | `getGrid()` — `.table-data table` inside the container |
-| Row multi-select | `enableRowTracking()` — captures click events at capture phase; Ctrl+click toggles, plain click resets selection; adds/removes `do-selected` CSS class |
+| Row multi-select | `enableRowTracking()` — captures click events at capture phase; Ctrl+click toggles, plain click resets the selection **only when inside the grid**; clicks outside the grid are ignored |
 | Cell extraction | `getCellValue(row, col)` — reads `td[col="N"]`; prefers `title` attribute over `textContent`; prefers multiline candidate over single-line; picks longest when equal |
 | Text normalization | `normalizeGridText(value)` — decodes HTML entities, replaces `\u00a0` with space, unescapes literal `\r\n`/`\n`/`\r` sequences |
 | XML/HTML formatting | `smartFormat(text)` — detects markup by `<`/`>` heuristic; naively indents tags for readability |
@@ -69,12 +106,12 @@ Key responsibilities and their implementation:
 | Scroll sync | Bidirectional sync of `scrollTop`/`scrollLeft` between `.do-old` and `.do-new` using an `isSyncing` guard |
 | Copy to clipboard | `.do-copy-btn` buttons use `navigator.clipboard.writeText`; label swaps to "Gekopieerd" + checkmark for 1.5 s; `extractPlainText` strips `.ln` line-number spans |
 | Column width | `autoAdjustColumnWidth()` — clones each diff line offscreen to measure natural width; sets `flex: 0 0 <w>px` when content overflows |
-| Button injection | `ensureButton()` — inserts `#do-compare-btn` into `.menu-right` if present, else prepends to container |
-| DOM observation | `MutationObserver` on `document.body` triggers `scheduleEnsureButton()` via `requestAnimationFrame` to batch re-checks |
+| Button injection | `ensureButton()` — inserts `#do-compare-btn` into `.menu-right` if present, else prepends to container. Calls `stopObservingDom()` once the button is in place |
+| DOM observation | `startObservingDom()` starts a `MutationObserver` on `document.body` whose callback short-circuits when the button already exists; `stopObservingDom()` disconnects it. The observer is stopped once the button has been placed to minimise host-page overhead |
 
 Execution order inside `init()`:
 1. `enableRowTracking()` — attach click listener
-2. `observeDom()` — start MutationObserver
+2. `startObservingDom()` — start MutationObserver
 3. `scheduleEnsureButton()` — immediate check
 
 `init()` is deferred with `DOMContentLoaded` if the document is still loading, otherwise called synchronously.
@@ -100,7 +137,7 @@ Key classes:
 | `.do-selected` | Selected row outline (`2px solid #2f4f79`) |
 | `.do-copy-btn` | Copy button in column header |
 
-Note: `.diff-added`, `.diff-removed`, `.wdiff-added`, and `.wdiff-removed` are each defined twice in the file (duplicates). This is harmless but should not be increased.
+All rules are defined exactly once. Don't reintroduce duplicate rule blocks.
 
 ## Development Workflow
 
@@ -115,24 +152,28 @@ Note: `.diff-added`, `.diff-removed`, `.wdiff-added`, and `.wdiff-removed` are e
 
 There is no automated test suite. Manual testing steps:
 1. Load the extension as unpacked.
-2. Open a DigiOffice instance in the browser.
-3. Navigate to a page containing a change-log grid.
-4. Verify the "Vergelijk mutaties" button appears in the toolbar.
-5. Ctrl+click multiple rows, then click the button to open the diff modal.
-6. Verify diff highlighting, scroll sync, and copy buttons work correctly.
+2. Open a DigiOffice instance in the browser. The toolbar icon should show a `?` badge.
+3. Click the extension icon → click **Activeer** in the popup → approve the browser's permission prompt. The badge should disappear.
+4. Navigate to a page containing a change-log grid.
+5. Verify the "Vergelijk mutaties" button appears in the grid toolbar.
+6. Ctrl+click multiple rows, then click the button to open the diff modal.
+7. Verify diff highlighting, scroll sync, and copy buttons work correctly.
+8. Click the extension icon → **Deactiveer** → the tab reloads and the "Vergelijk mutaties" button is gone.
 
 ### Making changes
 
 - **`diff.js`** is purely algorithmic; it has no DOM dependencies. Changes here should preserve the `renderDiff(oldText, newText) → {left, right}` interface consumed by `content.js`.
 - **`content.js`** depends on the DigiOffice DOM structure. The grid container ID selector `[id$="_grdChangeLog"]` and column indices (6 = field, 7 = old, 8 = new) are the main coupling points.
 - **`styles.css`** — all selectors are scoped to `do-*` IDs/classes. Do not use generic element selectors that could conflict with DigiOffice's own styles.
-- **`manifest.json`** — script load order matters: `diff.js` must be listed before `content.js` because `content.js` calls `renderDiff` and `escapeHtml` defined in `diff.js`.
+- **`manifest.json`** — no static `content_scripts`; all injection is driven by `background.js`. Injection order matters: `diff.js` must be passed before `content.js` in the `chrome.scripting.executeScript` `files` array because `content.js` calls `renderDiff` and `escapeHtml` defined in `diff.js`.
+- **`background.js`** — URL matching uses `/digioffice/i`; keep this regex in sync with `popup.js`.
+- **`popup.js`** — runs in the extension's own context; uses `chrome.permissions.request` and must be triggered from a user gesture (click).
 
 ## Key Conventions
 
 - No external dependencies; keep the extension self-contained.
 - All user-visible text is in Dutch.
-- DOM IDs used by the extension: `do-overlay`, `do-compare-btn`, `do-compare-slot`, `do-close`. Check for existence before inserting (`ensureButton` pattern).
+- DOM IDs used by the extension: `do-overlay`, `do-compare-btn`, `do-close`. Check for existence before inserting (`ensureButton` pattern).
 - The IIFE wrapper in `content.js` isolates module state (`selectedRows`, `ensureScheduled`) from the global scope.
 - `diff.js` functions are intentionally global (not wrapped) so `content.js` can call them as content scripts share a global scope within the same extension.
 - Avoid `innerHTML` injection of user-supplied text without `escapeHtml`; field names and values from the grid must always be escaped before embedding in HTML strings.

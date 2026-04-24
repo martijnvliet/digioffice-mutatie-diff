@@ -1,4 +1,7 @@
 (function () {
+  if (window.__digiofficeMutatieDiffLoaded) return;
+  window.__digiofficeMutatieDiffLoaded = true;
+
   const selectedRows = new Set();
   let ensureScheduled = false;
   let domObserver = null;
