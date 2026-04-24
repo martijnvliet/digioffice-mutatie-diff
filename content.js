@@ -142,10 +142,23 @@
   const overlay = document.createElement("div");
   overlay.id = "do-overlay";
 
+  const fieldCount = rows.length;
+  const summary = `${fieldCount} veld${fieldCount === 1 ? "" : "en"} geselecteerd`;
+
   let html = `
-<div class="do-modal">
+<div class="do-modal" role="dialog" aria-modal="true" aria-labelledby="do-modal-title">
   <div class="do-header">
-    <h2>Mutatievergelijking</h2>
+    <div class="do-header-main">
+      <h2 id="do-modal-title">Mutatievergelijking</h2>
+      <span class="do-summary">${escapeHtml(summary)}</span>
+    </div>
+    <div class="do-header-aside">
+      <div class="do-legend" aria-hidden="true">
+        <span class="do-legend-item"><span class="do-legend-dot do-legend-dot--removed"></span>Oud</span>
+        <span class="do-legend-item"><span class="do-legend-dot do-legend-dot--added"></span>Nieuw</span>
+      </div>
+      <button id="do-close-x" type="button" class="do-close-x" aria-label="Sluiten" title="Sluiten (Esc)">&times;</button>
+    </div>
   </div>
 
   <div class="do-content">
@@ -165,20 +178,22 @@ rows.forEach((row) => {
 
     <div class="do-columns">
       <div class="do-col">
-        <div class="do-col-header">
-          <button class="do-copy-btn" data-copy="old" title="Kopieer oude tekst">
+        <div class="do-col-header do-col-header--old">
+          <span class="do-col-label">Oud</span>
+          <button class="do-copy-btn" data-copy="old" type="button" title="Kopieer oude tekst" aria-label="Kopieer oude tekst">
             <i class="fa-solid fa-copy"></i>
-            <span class="btn-label">Oud</span>
+            <span class="btn-label">Kopieer</span>
           </button>
         </div>
         <div class="do-old">${diff.left}</div>
       </div>
 
       <div class="do-col">
-        <div class="do-col-header">
-          <button class="do-copy-btn" data-copy="new" title="Kopieer nieuwe tekst">
+        <div class="do-col-header do-col-header--new">
+          <span class="do-col-label">Nieuw</span>
+          <button class="do-copy-btn" data-copy="new" type="button" title="Kopieer nieuwe tekst" aria-label="Kopieer nieuwe tekst">
             <i class="fa-solid fa-copy"></i>
-            <span class="btn-label">Nieuw</span>
+            <span class="btn-label">Kopieer</span>
           </button>
         </div>
         <div class="do-new">${diff.right}</div>
@@ -188,7 +203,6 @@ rows.forEach((row) => {
   `;
 });
 
-// ✅ NU pas afsluiten
 html += `
   </div>
 
@@ -203,8 +217,32 @@ html += `
   overlay.innerHTML = html;
   document.body.appendChild(overlay);
 
-  document.getElementById("do-close").onclick = () =>
+  const previouslyFocused =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+  function closeOverlay() {
+    document.removeEventListener("keydown", onKeyDown);
     overlay.remove();
+    previouslyFocused?.focus?.();
+  }
+
+  function onKeyDown(e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeOverlay();
+    }
+  }
+
+  document.addEventListener("keydown", onKeyDown);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeOverlay();
+  });
+
+  document.getElementById("do-close").onclick = closeOverlay;
+  document.getElementById("do-close-x").onclick = closeOverlay;
 
   // === SCROLL SYNC ===
   const olds = overlay.querySelectorAll(".do-old");
@@ -245,21 +283,16 @@ html += `
 		try {
 		  await navigator.clipboard.writeText(text);
 
-		  // Bewaar originele tekst
-		  const originalLabel = isOld ? "Oud" : "Nieuw";
-
-		  // Zet check-icoon
 		  btn.innerHTML = `
 			<i class="fa-solid fa-check"></i>
-			Gekopieerd
+			<span class="btn-label">Gekopieerd</span>
 		  `;
-
 		  btn.classList.add("copied");
 
 		  setTimeout(() => {
 			btn.innerHTML = `
 			  <i class="fa-solid fa-copy"></i>
-			  ${originalLabel}
+			  <span class="btn-label">Kopieer</span>
 			`;
 			btn.classList.remove("copied");
 		  }, 1500);
