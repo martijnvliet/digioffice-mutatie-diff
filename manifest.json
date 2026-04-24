@@ -8,6 +8,10 @@
       "matches": [
         "*://*/*"
       ],
+      "include_globs": [
+        "*digioffice*",
+        "*DigiOffice*"
+      ],
       "js": ["diff.js", "content.js"],
       "css": ["styles.css"],
       "run_at": "document_idle",
