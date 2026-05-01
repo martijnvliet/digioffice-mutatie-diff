@@ -144,6 +144,7 @@
 
   const fields = rows.map((row) => ({
     veld: getCellValue(row, 6),
+    datum: getCellValue(row, 0),
     diff: renderFormattedDiff(getCellValue(row, 7), getCellValue(row, 8))
   }));
 
@@ -153,8 +154,11 @@
   const tabsHtml = useTabs
     ? `<div class="do-tabs" role="tablist" aria-label="Velden">${fields
         .map((f, i) => {
-          const safe = escapeHtml(f.veld);
-          return `<button id="do-tab-${i}" class="do-tab${i === 0 ? " active" : ""}" type="button" role="tab" aria-selected="${i === 0 ? "true" : "false"}" aria-controls="do-panel-${i}" tabindex="${i === 0 ? "0" : "-1"}" data-panel-idx="${i}" title="${safe}">${safe}</button>`;
+          const safeVeld = escapeHtml(f.veld);
+          const safeDatum = escapeHtml(f.datum);
+          const tooltip = f.datum ? `${safeVeld} — ${safeDatum}` : safeVeld;
+          const dateSpan = f.datum ? `<span class="do-tab-date">${safeDatum}</span>` : "";
+          return `<button id="do-tab-${i}" class="do-tab${i === 0 ? " active" : ""}" type="button" role="tab" aria-selected="${i === 0 ? "true" : "false"}" aria-controls="do-panel-${i}" tabindex="${i === 0 ? "0" : "-1"}" data-panel-idx="${i}" title="${tooltip}"><span class="do-tab-name">${safeVeld}</span>${dateSpan}</button>`;
         })
         .join("")}</div>`
     : "";
