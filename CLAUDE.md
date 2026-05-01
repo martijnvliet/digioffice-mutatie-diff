@@ -34,11 +34,13 @@ There is no build step, no package manager, and no test framework. All files are
 The extension uses an **opt-in per-host** model:
 
 - `manifest.json` declares **no static `content_scripts`**. Instead it declares `optional_host_permissions: ["*://*/*"]`, a `background` service worker, and a toolbar `action`.
-- `background.js` listens to `tabs.onUpdated` and `tabs.onActivated`. For every tab whose URL matches `/digioffice/i` it asks `chrome.permissions.contains` whether the origin is already granted.
-  - If granted → it injects `diff.js`, `content.js` and `styles.css` via `chrome.scripting` into all frames.
-  - If not granted → the toolbar action gets a `?` badge to signal availability.
+- `background.js` keeps a set of dynamic content-script registrations (`chrome.scripting.registerContentScripts`) in sync with the granted origins. Each granted origin gets a registration that auto-injects `diff.js`, `content.js` and `styles.css` into all matching pages and frames on every navigation, including SPA iframe loads — without relying on tab events.
+- On service-worker startup the background also calls `scanAllTabs()`, which iterates open tabs and updates each one's badge / triggers an explicit injection. This covers tabs that were already open when the extension was installed, reloaded, or when the service worker restarted.
+- For every tab whose URL matches `/digioffice/i`:
+  - If the host's origin is granted → keep the toolbar badge clear and ensure scripts are present.
+  - If not granted → the toolbar action gets a `?` badge.
 - Clicking the toolbar action opens `popup.html`, which shows the current host and either an **Activeer** or **Deactiveer** button. "Activeer" calls `chrome.permissions.request({ origins: [origin] })`; the browser's native prompt handles consent.
-- `chrome.permissions.onAdded` re-triggers injection into matching open tabs without a reload. `chrome.permissions.onRemoved` clears the badge; scripts already injected stay alive until the tab is reloaded (the popup reloads the tab on deactivate).
+- `chrome.permissions.onAdded` re-syncs registrations and injects into matching open tabs so the user doesn't have to reload. `chrome.permissions.onRemoved` unregisters the corresponding script and clears the badge; scripts already injected stay alive until the tab is reloaded (the popup reloads the tab on deactivate).
 
 ## File Responsibilities
 
@@ -51,13 +53,15 @@ The extension uses an **opt-in per-host** model:
 
 ### `background.js`
 Service worker. Responsibilities:
+- `init()` runs at the top of the file and is therefore re-executed on every service-worker startup (extension load, browser start, idle wakeup). It calls `syncContentScripts()` and then `scanAllTabs()`.
+- `syncContentScripts()` reconciles `chrome.scripting.getRegisteredContentScripts()` against `chrome.permissions.getAll().origins`. For each granted origin it ensures a dynamic registration exists with `id = "do-" + sanitised(origin)`, `matches: [origin]`, `runAt: "document_idle"`, `allFrames: true`, and the bundled `diff.js` / `content.js` / `styles.css`. Registrations whose origin is no longer granted are unregistered.
 - On `tabs.onUpdated` / `tabs.onActivated` → `handleTab(tab)`:
   - Not a DigiOffice URL → clear badge.
-  - DigiOffice URL, permission granted → `inject(tab)` + clear badge + title "Actief".
+  - DigiOffice URL, permission granted → `inject(tab)` (idempotent thanks to the IIFE guard in `content.js`) + clear badge + title "Actief".
   - DigiOffice URL, no permission → show `?` badge + title "Klik om te activeren".
-- `chrome.permissions.onAdded` → inject into all matching open tabs.
-- `chrome.permissions.onRemoved` → refresh all tab badges.
-- `inject(tab)` uses `chrome.scripting.executeScript({ allFrames: true, files: ["diff.js", "content.js"] })` followed by `insertCSS` for `styles.css`.
+- `chrome.permissions.onAdded` → re-syncs registrations and injects into matching open tabs.
+- `chrome.permissions.onRemoved` → re-syncs registrations (unregister) and refreshes all tab badges.
+- `inject(tab)` uses `chrome.scripting.executeScript({ allFrames: true, files: ["diff.js", "content.js"] })` followed by `insertCSS` for `styles.css`. This is the fallback path for tabs that were loaded before the dynamic registration existed; future page loads are covered by the registration alone.
 
 ### `popup.html` / `popup.css` / `popup.js`
 Toolbar popup (280px). `popup.js`:
