@@ -131,6 +131,35 @@
     return candidates.sort((a, b) => b.length - a.length)[0];
   }
 
+  const COLUMN_FALLBACKS = { datum: "0", veld: "6", oud: "7", nieuw: "8" };
+
+  function detectColumnIndices() {
+    const container = getGridContainer();
+    if (!container) return { ...COLUMN_FALLBACKS };
+
+    const wrap = container.parentElement || container;
+    const headerCells = wrap.querySelectorAll(
+      "th[col], thead [col], .table-header [col], [class*='header-row'] [col]"
+    );
+
+    const found = {};
+    for (const cell of headerCells) {
+      const colAttr = cell.getAttribute("col");
+      if (!colAttr) continue;
+      const text = (cell.getAttribute("title") || cell.textContent || "")
+        .trim()
+        .toLowerCase();
+      if (!text) continue;
+
+      if (found.datum === undefined && text.startsWith("datum")) found.datum = colAttr;
+      if (found.veld === undefined && text.startsWith("veld")) found.veld = colAttr;
+      if (found.oud === undefined && text.startsWith("oud")) found.oud = colAttr;
+      if (found.nieuw === undefined && text.startsWith("nieuw")) found.nieuw = colAttr;
+    }
+
+    return { ...COLUMN_FALLBACKS, ...found };
+  }
+
   function openComparison() {
   const rows = getSelectedRows();
 
@@ -142,10 +171,12 @@
   const overlay = document.createElement("div");
   overlay.id = "do-overlay";
 
+  const cols = detectColumnIndices();
+
   const fields = rows.map((row) => ({
-    veld: getCellValue(row, 6),
-    datum: getCellValue(row, 0),
-    diff: renderFormattedDiff(getCellValue(row, 7), getCellValue(row, 8))
+    veld: getCellValue(row, cols.veld),
+    datum: getCellValue(row, cols.datum),
+    diff: renderFormattedDiff(getCellValue(row, cols.oud), getCellValue(row, cols.nieuw))
   }));
 
   const useTabs = fields.length > 1;

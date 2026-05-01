@@ -166,7 +166,7 @@ There is no automated test suite. Manual testing steps:
 ### Making changes
 
 - **`diff.js`** is purely algorithmic; it has no DOM dependencies. Changes here should preserve the `renderDiff(oldText, newText) → {left, right}` interface consumed by `content.js`.
-- **`content.js`** depends on the DigiOffice DOM structure. The grid container ID selector `[id$="_grdChangeLog"]` and column indices (6 = field, 7 = old, 8 = new) are the main coupling points.
+- **`content.js`** depends on the DigiOffice DOM structure. The grid container ID selector `[id$="_grdChangeLog"]` is the main coupling point. Column indices for date / field / old / new are detected at runtime by `detectColumnIndices()` (matches header-cell `title`/text against `datum`, `veld`, `oud`, `nieuw`) with hardcoded fallbacks `0 / 6 / 7 / 8` if detection fails.
 - **`styles.css`** — all selectors are scoped to `do-*` IDs/classes. Do not use generic element selectors that could conflict with DigiOffice's own styles.
 - **`manifest.json`** — no static `content_scripts`; all injection is driven by `background.js`. Injection order matters: `diff.js` must be passed before `content.js` in the `chrome.scripting.executeScript` `files` array because `content.js` calls `renderDiff` and `escapeHtml` defined in `diff.js`.
 - **`background.js`** — URL matching uses `/digioffice/i`; keep this regex in sync with `popup.js`.
