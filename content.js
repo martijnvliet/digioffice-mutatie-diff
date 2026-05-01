@@ -38,7 +38,7 @@
     xml.split("\n").forEach((line) => {
       if (line.match(/^<\/.+/)) indent--;
       formatted += `${"  ".repeat(Math.max(indent, 0))}${line}\n`;
-      if (line.match(/^<[^!?/].*[^/]>$/)) indent++;
+      if (line.match(/^<[^!?/].*[^/]>$/) && !/<\//.test(line)) indent++;
     });
 
     return formatted.trim();
