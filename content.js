@@ -142,10 +142,55 @@
   const overlay = document.createElement("div");
   overlay.id = "do-overlay";
 
-  const fieldCount = rows.length;
-  const summary = `${fieldCount} veld${fieldCount === 1 ? "" : "en"} geselecteerd`;
+  const fields = rows.map((row) => ({
+    veld: getCellValue(row, 6),
+    diff: renderFormattedDiff(getCellValue(row, 7), getCellValue(row, 8))
+  }));
 
-  let html = `
+  const useTabs = fields.length > 1;
+  const summary = `${fields.length} veld${fields.length === 1 ? "" : "en"} geselecteerd`;
+
+  const tabsHtml = useTabs
+    ? `<div class="do-tabs" role="tablist" aria-label="Velden">${fields
+        .map((f, i) => {
+          const safe = escapeHtml(f.veld);
+          return `<button id="do-tab-${i}" class="do-tab${i === 0 ? " active" : ""}" type="button" role="tab" aria-selected="${i === 0 ? "true" : "false"}" aria-controls="do-panel-${i}" tabindex="${i === 0 ? "0" : "-1"}" data-panel-idx="${i}" title="${safe}">${safe}</button>`;
+        })
+        .join("")}</div>`
+    : "";
+
+  const panelsHtml = fields
+    .map((f, i) => `
+  <div id="do-panel-${i}" class="do-field-block do-panel${i === 0 ? " active" : ""}" role="${useTabs ? "tabpanel" : "group"}" ${useTabs ? `aria-labelledby="do-tab-${i}"` : ""} data-panel-idx="${i}">
+    ${useTabs ? "" : `<div class="do-field-title">${escapeHtml(f.veld)}</div>`}
+
+    <div class="do-columns">
+      <div class="do-col">
+        <div class="do-col-header do-col-header--old">
+          <span class="do-col-label">Oud</span>
+          <button class="do-copy-btn" data-copy="old" type="button" title="Kopieer oude tekst" aria-label="Kopieer oude tekst">
+            <i class="fa-solid fa-copy"></i>
+            <span class="btn-label">Kopieer</span>
+          </button>
+        </div>
+        <div class="do-old">${f.diff.left}</div>
+      </div>
+
+      <div class="do-col">
+        <div class="do-col-header do-col-header--new">
+          <span class="do-col-label">Nieuw</span>
+          <button class="do-copy-btn" data-copy="new" type="button" title="Kopieer nieuwe tekst" aria-label="Kopieer nieuwe tekst">
+            <i class="fa-solid fa-copy"></i>
+            <span class="btn-label">Kopieer</span>
+          </button>
+        </div>
+        <div class="do-new">${f.diff.right}</div>
+      </div>
+    </div>
+  </div>`)
+    .join("");
+
+  const html = `
 <div class="do-modal" role="dialog" aria-modal="true" aria-labelledby="do-modal-title">
   <div class="do-header">
     <div class="do-header-main">
@@ -160,50 +205,8 @@
       <button id="do-close-x" type="button" class="do-close-x" aria-label="Sluiten" title="Sluiten (Esc)">&times;</button>
     </div>
   </div>
-
-  <div class="do-content">
-`;
-
-rows.forEach((row) => {
-
-  const veld = getCellValue(row, 6);
-  const oud = getCellValue(row, 7);
-  const nieuw = getCellValue(row, 8);
-
-  const diff = renderFormattedDiff(oud, nieuw);
-
-  html += `
-  <div class="do-field-block">
-    <div class="do-field-title">${escapeHtml(veld)}</div>
-
-    <div class="do-columns">
-      <div class="do-col">
-        <div class="do-col-header do-col-header--old">
-          <span class="do-col-label">Oud</span>
-          <button class="do-copy-btn" data-copy="old" type="button" title="Kopieer oude tekst" aria-label="Kopieer oude tekst">
-            <i class="fa-solid fa-copy"></i>
-            <span class="btn-label">Kopieer</span>
-          </button>
-        </div>
-        <div class="do-old">${diff.left}</div>
-      </div>
-
-      <div class="do-col">
-        <div class="do-col-header do-col-header--new">
-          <span class="do-col-label">Nieuw</span>
-          <button class="do-copy-btn" data-copy="new" type="button" title="Kopieer nieuwe tekst" aria-label="Kopieer nieuwe tekst">
-            <i class="fa-solid fa-copy"></i>
-            <span class="btn-label">Kopieer</span>
-          </button>
-        </div>
-        <div class="do-new">${diff.right}</div>
-      </div>
-    </div>
-  </div>
-  `;
-});
-
-html += `
+  ${tabsHtml}
+  <div class="do-content">${panelsHtml}
   </div>
 
   <div class="do-footer">
@@ -243,6 +246,39 @@ html += `
 
   document.getElementById("do-close").onclick = closeOverlay;
   document.getElementById("do-close-x").onclick = closeOverlay;
+
+  // === TABS ===
+  const tabBtns = Array.from(overlay.querySelectorAll(".do-tab"));
+  const panels = Array.from(overlay.querySelectorAll(".do-panel"));
+
+  function activateTab(idx) {
+    tabBtns.forEach((t, i) => {
+      const active = i === idx;
+      t.classList.toggle("active", active);
+      t.setAttribute("aria-selected", active ? "true" : "false");
+      t.tabIndex = active ? 0 : -1;
+    });
+    panels.forEach((p, i) => p.classList.toggle("active", i === idx));
+    const activePanel = panels[idx];
+    if (activePanel) autoAdjustColumnWidth(activePanel);
+  }
+
+  tabBtns.forEach((tab, i) => {
+    tab.addEventListener("click", () => activateTab(i));
+  });
+
+  const tabsContainer = overlay.querySelector(".do-tabs");
+  if (tabsContainer) {
+    tabsContainer.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const dir = e.key === "ArrowRight" ? 1 : -1;
+      const cur = tabBtns.findIndex((t) => t.classList.contains("active"));
+      const next = (cur + dir + tabBtns.length) % tabBtns.length;
+      activateTab(next);
+      tabBtns[next].focus();
+    });
+  }
 
   // === SCROLL SYNC ===
   const olds = overlay.querySelectorAll(".do-old");
@@ -305,7 +341,8 @@ html += `
 
 	});
 
-  autoAdjustColumnWidth(overlay);
+  const initialPanel = panels[0];
+  if (initialPanel) autoAdjustColumnWidth(initialPanel);
 }
 
 
@@ -325,8 +362,8 @@ html += `
 	  return lines.join("\n");
 	}
 	  
-  function autoAdjustColumnWidth(overlay) {
-	  const columns = overlay.querySelectorAll(".do-old, .do-new");
+  function autoAdjustColumnWidth(scope) {
+	  const columns = scope.querySelectorAll(".do-old, .do-new");
 
 	  columns.forEach(col => {
 		const lines = col.querySelectorAll("div");

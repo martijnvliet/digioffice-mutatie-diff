@@ -149,6 +149,58 @@
   outline-offset: 2px;
 }
 
+/* ==== Tab strip ==== */
+.do-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  background: #f4f6f9;
+  border-bottom: 1px solid #e0e4eb;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.do-tab {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 3px solid transparent !important;
+  color: #555 !important;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.do-tab:hover {
+  color: #2f4f79 !important;
+  background: rgba(47, 79, 121, 0.06) !important;
+}
+
+.do-tab.active {
+  color: #2f4f79 !important;
+  border-bottom-color: #2f4f79 !important;
+  font-weight: 600;
+}
+
+.do-tab:focus-visible {
+  outline: 2px solid #2f4f79;
+  outline-offset: -2px;
+}
+
+/* Panels: only the active one is shown */
+.do-panel:not(.active) {
+  display: none;
+}
+
 /* ==== Content scroll area ==== */
 .do-content {
   flex: 1 1 auto;
