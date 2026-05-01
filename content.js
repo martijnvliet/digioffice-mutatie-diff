@@ -400,16 +400,23 @@
 	function ensureButton() {
 	  const grid = getGrid();
 	  const container = getGridContainer();
-	  const existingBtn = document.getElementById("do-compare-btn");
-
 	  if (!grid || !container) return;
-
-	  if (existingBtn) return;
 
 	  const legendRow = container.parentElement?.querySelector(".table-legend-row");
 	  const menuRight = legendRow?.querySelector(".menu-right");
 
-	  const btn = document.createElement("button");
+	  let btn = document.getElementById("do-compare-btn");
+
+	  if (btn) {
+		// Re-home the button if menu-right became available later (or if a
+		// re-render moved it elsewhere) so it doesn't stay in the fallback spot.
+		if (menuRight && btn.parentElement !== menuRight) {
+		  menuRight.insertBefore(btn, menuRight.firstChild);
+		}
+		return;
+	  }
+
+	  btn = document.createElement("button");
 	  btn.id = "do-compare-btn";
 	  btn.type = "button";
 	  btn.innerText = "Vergelijk mutaties";
@@ -426,7 +433,10 @@
     if (domObserver) return;
 
     domObserver = new MutationObserver(() => {
-      if (document.getElementById("do-compare-btn")) return;
+      const btn = document.getElementById("do-compare-btn");
+      if (btn && btn.parentElement?.classList.contains("menu-right")) {
+        return;
+      }
       scheduleEnsureButton();
     });
 
