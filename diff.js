@@ -87,41 +87,30 @@ function diffLines(oldLines, newLines) {
 }
 
 function tryPairRemovedAdded(diff) {
-  for (let i = 0; i < diff.length; i++) {
-    const current = diff[i];
+  let i = 0;
+  while (i < diff.length) {
+    if (diff[i].type === "equal") {
+      i++;
+      continue;
+    }
 
-    if (current.type !== "removed") continue;
+    const removeds = [];
+    const addeds = [];
+    while (i < diff.length && diff[i].type !== "equal") {
+      if (diff[i].type === "removed") removeds.push(diff[i]);
+      else if (diff[i].type === "added") addeds.push(diff[i]);
+      i++;
+    }
 
-    for (let j = i + 1; j < diff.length; j++) {
-      const candidate = diff[j];
-
-      if (candidate.type !== "added") continue;
-
-      if (
-        (current.old.trim() === "" && candidate.new.trim() !== "") ||
-        similarity(current.old, candidate.new) > 0.5
-      ) {
-        current.type = "changed";
-        current.new = candidate.new;
-        candidate.type = "paired";
-        break;
-      }
+    const pairCount = Math.min(removeds.length, addeds.length);
+    for (let k = 0; k < pairCount; k++) {
+      removeds[k].type = "changed";
+      removeds[k].new = addeds[k].new;
+      addeds[k].type = "paired";
     }
   }
 
-  return diff.filter(d => d.type !== "paired");
-}
-
-
-function similarity(a, b) {
-  const minLen = Math.min(a.length, b.length);
-  let same = 0;
-
-  for (let i = 0; i < minLen; i++) {
-    if (a[i] === b[i]) same++;
-  }
-
-  return same / Math.max(a.length, b.length);
+  return diff.filter((d) => d.type !== "paired");
 }
 
 function renderDiff(oldText, newText) {

@@ -73,10 +73,9 @@ Loaded first; defines global helper functions used by `content.js`.
 |---|---|
 | `decodeHtml(str)` | Decodes HTML entities via a temporary `<textarea>` |
 | `escapeHtml(str)` | Escapes `&`, `<`, `>` for safe HTML injection |
-| `similarity(a, b)` | Character-level similarity ratio (0–1) used for pairing heuristic |
 | `buildLcsMatrix(a, b)` | Builds LCS (Longest Common Subsequence) DP matrix over string arrays |
 | `diffLines(oldLines, newLines)` | Produces a list of `{type, old, new}` records using the LCS matrix |
-| `tryPairRemovedAdded(diff)` | Post-processes diff to pair nearby `removed`+`added` entries into `changed` when similarity > 0.5; removes paired entries |
+| `tryPairRemovedAdded(diff)` | Walks the diff in blocks separated by `equal` entries and pairs the k-th `removed` with the k-th `added` inside each block into a `changed` entry; surplus removed/added entries stay unpaired. Pairing is structural (not similarity-based) so simple value swaps like `2`→`0` pair correctly |
 | `wordDiff(a, b)` | Simple positional word diff (split on whitespace); returns `{left, right}` HTML strings with `wdiff-removed`/`wdiff-added` spans |
 | `renderDiff(oldText, newText)` | Orchestrates the full pipeline: decode → split lines → `diffLines` → `tryPairRemovedAdded` → render HTML; returns `{left, right}` |
 
