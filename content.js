@@ -9,6 +9,17 @@
   function clearSelection() {
     selectedRows.forEach((row) => row.classList.remove("do-selected"));
     selectedRows.clear();
+    updateButtonState();
+  }
+
+  function updateButtonState() {
+    const btn = document.getElementById("do-compare-btn");
+    if (!btn) return;
+    const enabled = selectedRows.size > 0;
+    btn.disabled = !enabled;
+    btn.title = enabled
+      ? `Vergelijk ${selectedRows.size} geselecteerde mutatie${selectedRows.size === 1 ? "" : "s"}`
+      : "Selecteer eerst één of meer regels in de grid";
   }
 
   function getGridContainer() {
@@ -20,33 +31,95 @@
     if (!container) return null;
     return container.querySelector(".table-data table");
   }
-  
+
+  // State-machine XML/HTML pretty-printer that respects quoted attribute
+  // values (so `<tag attr="a>b">` is not split mid-attribute), and skips
+  // indent changes inside comments, CDATA and processing instructions.
   function smartFormat(text) {
     if (!text) return "";
 
-    const looksLikeMarkup =
-      text.includes("<") &&
-      text.includes(">") &&
-      /<\/?[a-zA-Z]/.test(text);
+    if (!/<\/?[a-zA-Z][^>]*>/.test(text)) return text;
 
-    if (!looksLikeMarkup) return text;
+    const segments = [];
+    let i = 0;
+    while (i < text.length) {
+      if (text.startsWith("<!--", i)) {
+        const end = text.indexOf("-->", i + 4);
+        const stop = end === -1 ? text.length : end + 3;
+        segments.push({ kind: "comment", text: text.slice(i, stop) });
+        i = stop;
+        continue;
+      }
+      if (text.startsWith("<![CDATA[", i)) {
+        const end = text.indexOf("]]>", i + 9);
+        const stop = end === -1 ? text.length : end + 3;
+        segments.push({ kind: "cdata", text: text.slice(i, stop) });
+        i = stop;
+        continue;
+      }
+      if (text[i] === "<") {
+        let j = i + 1;
+        let inQuote = null;
+        while (j < text.length) {
+          const c = text[j];
+          if (inQuote) {
+            if (c === inQuote) inQuote = null;
+          } else if (c === '"' || c === "'") {
+            inQuote = c;
+          } else if (c === ">") {
+            j++;
+            break;
+          }
+          j++;
+        }
+        const raw = text.slice(i, j);
+        let kind = "tag";
+        if (raw.startsWith("<?")) kind = "processing";
+        else if (raw.startsWith("<!")) kind = "declaration";
+        else if (raw.startsWith("</")) kind = "close";
+        else if (/\/\s*>$/.test(raw)) kind = "selfclose";
+        else kind = "open";
+        segments.push({ kind, text: raw });
+        i = j;
+      } else {
+        let j = i;
+        while (j < text.length && text[j] !== "<") j++;
+        const chunk = text.slice(i, j);
+        if (chunk.trim()) segments.push({ kind: "text", text: chunk.trim() });
+        i = j;
+      }
+    }
 
-    const xml = text.replace(/>\s*</g, ">\n<");
     let formatted = "";
     let indent = 0;
+    const PAD = (n) => "  ".repeat(Math.max(n, 0));
 
-    xml.split("\n").forEach((line) => {
-      if (line.match(/^<\/.+/)) indent--;
-      formatted += `${"  ".repeat(Math.max(indent, 0))}${line}\n`;
-      if (line.match(/^<[^!?/].*[^/]>$/) && !/<\//.test(line)) indent++;
-    });
+    for (const seg of segments) {
+      if (seg.kind === "close") indent--;
+      formatted += PAD(indent) + seg.text + "\n";
+      if (seg.kind === "open") indent++;
+    }
 
     return formatted.trim();
   }
 
-  function renderFormattedDiff(oldText, newText) {
-    const oldFormatted = smartFormat(decodeHtml(oldText || "")).trimEnd();
-    const newFormatted = smartFormat(decodeHtml(newText || "")).trimEnd();
+  function normalizeWhitespace(text) {
+    return text
+      .split("\n")
+      .map((line) => line.replace(/[ \t]+/g, " ").trim())
+      .filter((line) => line.length > 0)
+      .join("\n");
+  }
+
+  function renderFormattedDiff(oldText, newText, opts = {}) {
+    let oldFormatted = smartFormat(decodeHtml(oldText || "")).trimEnd();
+    let newFormatted = smartFormat(decodeHtml(newText || "")).trimEnd();
+
+    if (opts.ignoreWhitespace) {
+      oldFormatted = normalizeWhitespace(oldFormatted);
+      newFormatted = normalizeWhitespace(newFormatted);
+    }
+
     return renderDiff(oldFormatted, newFormatted);
   }
 
@@ -65,9 +138,7 @@
           return;
         }
 
-        const row = clickTarget.closest(
-          ".table-data tbody tr[id][vi]"
-        );
+        const row = clickTarget.closest(".table-data tbody tr[id][vi]");
         if (!row || !row.querySelector("td")) return;
 
         if (!e.ctrlKey) clearSelection();
@@ -79,6 +150,8 @@
           selectedRows.add(row);
           row.classList.add("do-selected");
         }
+
+        updateButtonState();
       },
       true
     );
@@ -91,9 +164,7 @@
   function normalizeGridText(value) {
     if (!value) return "";
 
-    let text = decodeHtml(value)
-      .replace(/\u00a0/g, " ")
-      .trim();
+    let text = decodeHtml(value).replace(/ /g, " ").trim();
 
     if (!text.includes("\n") && /\\r\\n|\\n|\\r/.test(text)) {
       text = text
@@ -122,10 +193,7 @@
 
     if (!candidates.length) return "";
 
-    const multiline = candidates.find((candidate) =>
-      candidate.includes("\n")
-    );
-
+    const multiline = candidates.find((candidate) => candidate.includes("\n"));
     if (multiline) return multiline;
 
     return candidates.sort((a, b) => b.length - a.length)[0];
@@ -160,45 +228,36 @@
     return { ...COLUMN_FALLBACKS, ...found };
   }
 
-  function openComparison() {
-  const rows = getSelectedRows();
-
-  if (!rows.length) {
-    alert("Selecteer minimaal één mutatieregel.");
-    return;
+  function buildPanelToolbar() {
+    return `
+    <div class="do-panel-toolbar">
+      <div class="do-search">
+        <input type="search" class="do-search-input" placeholder="Zoek in deze diff..." aria-label="Zoek in diff" />
+        <span class="do-search-count" aria-live="polite"></span>
+        <button type="button" class="do-icon-btn" data-search-prev title="Vorige treffer (Shift+Enter)" aria-label="Vorige treffer">&#x25B2;</button>
+        <button type="button" class="do-icon-btn" data-search-next title="Volgende treffer (Enter)" aria-label="Volgende treffer">&#x25BC;</button>
+      </div>
+      <div class="do-nav">
+        <button type="button" class="do-icon-btn do-nav-btn" data-change-prev title="Vorige wijziging (P)" aria-label="Vorige wijziging">&#x25B2; Wijziging</button>
+        <button type="button" class="do-icon-btn do-nav-btn" data-change-next title="Volgende wijziging (N)" aria-label="Volgende wijziging">&#x25BC; Wijziging</button>
+      </div>
+    </div>`;
   }
 
-  const overlay = document.createElement("div");
-  overlay.id = "do-overlay";
+  function buildPanelHtml(field, index, useTabs) {
+    const safeVeld = escapeHtml(field.veld);
+    const titleHtml = useTabs
+      ? ""
+      : `<div class="do-field-title">${safeVeld}</div>`;
+    const truncatedNotice = field.diff.truncated
+      ? `<div class="do-truncated-notice">Diff is te groot voor een regel-vergelijking; de oude en nieuwe tekst worden ongekleurd naast elkaar getoond.</div>`
+      : "";
 
-  const cols = detectColumnIndices();
-
-  const fields = rows.map((row) => ({
-    veld: getCellValue(row, cols.veld),
-    datum: getCellValue(row, cols.datum),
-    diff: renderFormattedDiff(getCellValue(row, cols.oud), getCellValue(row, cols.nieuw))
-  }));
-
-  const useTabs = fields.length > 1;
-  const summary = `${fields.length} veld${fields.length === 1 ? "" : "en"} geselecteerd`;
-
-  const tabsHtml = useTabs
-    ? `<div class="do-tabs" role="tablist" aria-label="Velden">${fields
-        .map((f, i) => {
-          const safeVeld = escapeHtml(f.veld);
-          const safeDatum = escapeHtml(f.datum);
-          const tooltip = f.datum ? `${safeVeld} — ${safeDatum}` : safeVeld;
-          const dateSpan = f.datum ? `<span class="do-tab-date">${safeDatum}</span>` : "";
-          return `<button id="do-tab-${i}" class="do-tab${i === 0 ? " active" : ""}" type="button" role="tab" aria-selected="${i === 0 ? "true" : "false"}" aria-controls="do-panel-${i}" tabindex="${i === 0 ? "0" : "-1"}" data-panel-idx="${i}" title="${tooltip}"><span class="do-tab-name">${safeVeld}</span>${dateSpan}</button>`;
-        })
-        .join("")}</div>`
-    : "";
-
-  const panelsHtml = fields
-    .map((f, i) => `
-  <div id="do-panel-${i}" class="do-field-block do-panel${i === 0 ? " active" : ""}" role="${useTabs ? "tabpanel" : "group"}" ${useTabs ? `aria-labelledby="do-tab-${i}"` : ""} data-panel-idx="${i}">
-    ${useTabs ? "" : `<div class="do-field-title">${escapeHtml(f.veld)}</div>`}
-
+    return `
+  <div id="do-panel-${index}" class="do-field-block do-panel${index === 0 ? " active" : ""}" role="${useTabs ? "tabpanel" : "group"}" ${useTabs ? `aria-labelledby="do-tab-${index}"` : ""} data-panel-idx="${index}">
+    ${titleHtml}
+    ${buildPanelToolbar()}
+    ${truncatedNotice}
     <div class="do-columns">
       <div class="do-col">
         <div class="do-col-header do-col-header--old">
@@ -208,7 +267,7 @@
             <span class="btn-label">Kopieer</span>
           </button>
         </div>
-        <div class="do-old">${f.diff.left}</div>
+        <div class="do-old">${field.diff.left}</div>
       </div>
 
       <div class="do-col">
@@ -219,13 +278,53 @@
             <span class="btn-label">Kopieer</span>
           </button>
         </div>
-        <div class="do-new">${f.diff.right}</div>
+        <div class="do-new">${field.diff.right}</div>
       </div>
     </div>
-  </div>`)
-    .join("");
+  </div>`;
+  }
 
-  const html = `
+  function openComparison() {
+    const rows = getSelectedRows();
+    if (!rows.length) return;
+
+    const cols = detectColumnIndices();
+    let ignoreWhitespace = false;
+
+    function buildFields() {
+      return rows.map((row) => ({
+        veld: getCellValue(row, cols.veld),
+        datum: getCellValue(row, cols.datum),
+        diff: renderFormattedDiff(
+          getCellValue(row, cols.oud),
+          getCellValue(row, cols.nieuw),
+          { ignoreWhitespace }
+        )
+      }));
+    }
+
+    let fields = buildFields();
+    const useTabs = fields.length > 1;
+    const summary = `${fields.length} veld${fields.length === 1 ? "" : "en"} geselecteerd`;
+
+    const tabsHtml = useTabs
+      ? `<div class="do-tabs" role="tablist" aria-label="Velden">${fields
+          .map((f, i) => {
+            const safeVeld = escapeHtml(f.veld);
+            const safeDatum = escapeHtml(f.datum);
+            const tooltip = f.datum ? `${safeVeld} — ${safeDatum}` : safeVeld;
+            const dateSpan = f.datum
+              ? `<span class="do-tab-date">${safeDatum}</span>`
+              : "";
+            return `<button id="do-tab-${i}" class="do-tab${i === 0 ? " active" : ""}" type="button" role="tab" aria-selected="${i === 0 ? "true" : "false"}" aria-controls="do-panel-${i}" tabindex="${i === 0 ? "0" : "-1"}" data-panel-idx="${i}" title="${tooltip}"><span class="do-tab-name">${safeVeld}</span>${dateSpan}</button>`;
+          })
+          .join("")}</div>`
+      : "";
+
+    const overlay = document.createElement("div");
+    overlay.id = "do-overlay";
+
+    overlay.innerHTML = `
 <div class="do-modal" role="dialog" aria-modal="true" aria-labelledby="do-modal-title">
   <div class="do-header">
     <div class="do-header-main">
@@ -241,228 +340,398 @@
     </div>
   </div>
   ${tabsHtml}
-  <div class="do-content">${panelsHtml}
-  </div>
+  <div class="do-content">${fields.map((f, i) => buildPanelHtml(f, i, useTabs)).join("")}</div>
 
   <div class="do-footer">
-    <button id="do-close" type="button" class="do-close-btn">
-      Sluiten
-    </button>
+    <label class="do-toggle">
+      <input type="checkbox" id="do-ignore-ws" />
+      <span>Negeer witregels</span>
+    </label>
+    <button id="do-close" type="button" class="do-close-btn">Sluiten</button>
   </div>
 </div>`;
 
+    document.body.appendChild(overlay);
 
-  overlay.innerHTML = html;
-  document.body.appendChild(overlay);
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
 
-  const previouslyFocused =
-    document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-
-  function closeOverlay() {
-    document.removeEventListener("keydown", onKeyDown);
-    overlay.remove();
-    previouslyFocused?.focus?.();
-  }
-
-  function onKeyDown(e) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeOverlay();
+    function closeOverlay() {
+      document.removeEventListener("keydown", onKeyDown);
+      overlay.remove();
+      previouslyFocused?.focus?.();
     }
+
+    function onKeyDown(e) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeOverlay();
+        return;
+      }
+      // Global shortcuts when not in input
+      const tag = e.target?.tagName;
+      const inEditable = tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable;
+      if (!inEditable && (e.key === "n" || e.key === "p")) {
+        const active = overlay.querySelector(".do-panel.active");
+        if (active?.__navigateChange) {
+          e.preventDefault();
+          active.__navigateChange(e.key === "n" ? 1 : -1);
+        }
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closeOverlay();
+    });
+
+    // Focus trap inside the modal
+    overlay.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const focusables = overlay.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+
+    overlay.querySelector("#do-close").onclick = closeOverlay;
+    overlay.querySelector("#do-close-x").onclick = closeOverlay;
+
+    // === TABS ===
+    let tabBtns = Array.from(overlay.querySelectorAll(".do-tab"));
+    let panels = Array.from(overlay.querySelectorAll(".do-panel"));
+
+    function activateTab(idx) {
+      tabBtns.forEach((t, i) => {
+        const active = i === idx;
+        t.classList.toggle("active", active);
+        t.setAttribute("aria-selected", active ? "true" : "false");
+        t.tabIndex = active ? 0 : -1;
+      });
+      panels.forEach((p, i) => p.classList.toggle("active", i === idx));
+      const activePanel = panels[idx];
+      if (activePanel) autoAdjustColumnWidth(activePanel);
+    }
+
+    function bindTabClicks() {
+      tabBtns.forEach((tab, i) => {
+        tab.addEventListener("click", () => activateTab(i));
+      });
+    }
+    bindTabClicks();
+
+    const tabsContainer = overlay.querySelector(".do-tabs");
+    if (tabsContainer) {
+      tabsContainer.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        e.preventDefault();
+        const dir = e.key === "ArrowRight" ? 1 : -1;
+        const cur = tabBtns.findIndex((t) => t.classList.contains("active"));
+        const next = (cur + dir + tabBtns.length) % tabBtns.length;
+        activateTab(next);
+        tabBtns[next].focus();
+      });
+    }
+
+    function attachPanelHandlers() {
+      panels.forEach((panel) => {
+        attachScrollSync(panel);
+        attachCopyButtons(panel);
+        attachNavigation(panel);
+        attachSearch(panel);
+      });
+    }
+
+    function attachScrollSync(panel) {
+      const oldCol = panel.querySelector(".do-old");
+      const newCol = panel.querySelector(".do-new");
+      if (!oldCol || !newCol) return;
+      let isSyncing = false;
+      oldCol.addEventListener("scroll", () => {
+        if (isSyncing) return;
+        isSyncing = true;
+        newCol.scrollTop = oldCol.scrollTop;
+        newCol.scrollLeft = oldCol.scrollLeft;
+        isSyncing = false;
+      });
+      newCol.addEventListener("scroll", () => {
+        if (isSyncing) return;
+        isSyncing = true;
+        oldCol.scrollTop = newCol.scrollTop;
+        oldCol.scrollLeft = newCol.scrollLeft;
+        isSyncing = false;
+      });
+    }
+
+    function attachCopyButtons(panel) {
+      panel.querySelectorAll(".do-copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const isOld = btn.dataset.copy === "old";
+          const container = btn
+            .closest(".do-col")
+            .querySelector(isOld ? ".do-old" : ".do-new");
+          const text = extractPlainText(container);
+          try {
+            await navigator.clipboard.writeText(text);
+            btn.innerHTML = `<i class="fa-solid fa-check"></i><span class="btn-label">Gekopieerd</span>`;
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.innerHTML = `<i class="fa-solid fa-copy"></i><span class="btn-label">Kopieer</span>`;
+              btn.classList.remove("copied");
+            }, 1500);
+          } catch (err) {
+            console.error("Clipboard error:", err);
+          }
+        });
+      });
+    }
+
+    function attachNavigation(panel) {
+      const oldCol = panel.querySelector(".do-old");
+      const newCol = panel.querySelector(".do-new");
+      if (!oldCol || !newCol) return;
+
+      const oldLines = Array.from(oldCol.children);
+      const newLines = Array.from(newCol.children);
+      const total = Math.max(oldLines.length, newLines.length);
+
+      const isChange = (line) =>
+        !!line &&
+        (line.classList.contains("diff-removed") ||
+          line.classList.contains("diff-added") ||
+          line.classList.contains("diff-empty") ||
+          line.classList.contains("diff-removed-empty"));
+
+      const changeIndices = [];
+      for (let i = 0; i < total; i++) {
+        if (isChange(oldLines[i]) || isChange(newLines[i])) {
+          if (
+            changeIndices.length === 0 ||
+            changeIndices[changeIndices.length - 1] !== i - 1
+          ) {
+            changeIndices.push(i);
+          } else {
+            changeIndices[changeIndices.length - 1] = i;
+          }
+        }
+      }
+      const navTargets = [];
+      // Re-derive starts of change blocks (above logic merged into latest; redo cleanly)
+      let inBlock = false;
+      for (let i = 0; i < total; i++) {
+        const change = isChange(oldLines[i]) || isChange(newLines[i]);
+        if (change && !inBlock) navTargets.push(i);
+        inBlock = change;
+      }
+
+      let cur = -1;
+      function navigate(dir) {
+        if (!navTargets.length) return;
+        if (cur === -1) {
+          cur = dir > 0 ? 0 : navTargets.length - 1;
+        } else {
+          cur = (cur + dir + navTargets.length) % navTargets.length;
+        }
+        const idx = navTargets[cur];
+        const target = oldLines[idx] || newLines[idx];
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      panel.querySelector("[data-change-prev]")
+        ?.addEventListener("click", () => navigate(-1));
+      panel.querySelector("[data-change-next]")
+        ?.addEventListener("click", () => navigate(1));
+
+      const navBtns = panel.querySelectorAll("[data-change-prev], [data-change-next]");
+      navBtns.forEach((b) => {
+        if (!navTargets.length) b.disabled = true;
+      });
+
+      panel.__navigateChange = navigate;
+    }
+
+    function attachSearch(panel) {
+      const input = panel.querySelector(".do-search-input");
+      const counter = panel.querySelector(".do-search-count");
+      const oldCol = panel.querySelector(".do-old");
+      const newCol = panel.querySelector(".do-new");
+      if (!input || !counter || !oldCol || !newCol) return;
+
+      let matches = [];
+      let cur = -1;
+      let debounceTimer;
+
+      function clearMarks() {
+        [oldCol, newCol].forEach((col) => {
+          col.querySelectorAll(".do-search-match, .do-search-current").forEach((el) => {
+            el.classList.remove("do-search-match", "do-search-current");
+          });
+        });
+      }
+
+      function update() {
+        const q = input.value.trim().toLowerCase();
+        clearMarks();
+        matches = [];
+        cur = -1;
+
+        if (q) {
+          [oldCol, newCol].forEach((col) => {
+            Array.from(col.children).forEach((line) => {
+              if (line.textContent.toLowerCase().includes(q)) {
+                line.classList.add("do-search-match");
+                matches.push(line);
+              }
+            });
+          });
+          if (matches.length) {
+            cur = 0;
+            matches[0].classList.add("do-search-current");
+            matches[0].scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }
+        renderCount();
+      }
+
+      function renderCount() {
+        if (!input.value.trim()) {
+          counter.textContent = "";
+        } else {
+          counter.textContent = matches.length
+            ? `${cur + 1} / ${matches.length}`
+            : "geen";
+        }
+      }
+
+      function navigate(dir) {
+        if (!matches.length) return;
+        matches[cur]?.classList.remove("do-search-current");
+        cur = (cur + dir + matches.length) % matches.length;
+        matches[cur].classList.add("do-search-current");
+        matches[cur].scrollIntoView({ behavior: "smooth", block: "center" });
+        renderCount();
+      }
+
+      input.addEventListener("input", () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(update, 120);
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (matches.length) navigate(e.shiftKey ? -1 : 1);
+          else update();
+        }
+      });
+      panel.querySelector("[data-search-prev]")
+        ?.addEventListener("click", () => navigate(-1));
+      panel.querySelector("[data-search-next]")
+        ?.addEventListener("click", () => navigate(1));
+    }
+
+    attachPanelHandlers();
+
+    // Ignore-whitespace toggle
+    const ignoreWsToggle = overlay.querySelector("#do-ignore-ws");
+    ignoreWsToggle?.addEventListener("change", () => {
+      ignoreWhitespace = ignoreWsToggle.checked;
+      const activeIdx = panels.findIndex((p) => p.classList.contains("active"));
+      fields = buildFields();
+      const content = overlay.querySelector(".do-content");
+      content.innerHTML = fields
+        .map((f, i) => buildPanelHtml(f, i, useTabs))
+        .join("");
+      panels = Array.from(overlay.querySelectorAll(".do-panel"));
+      attachPanelHandlers();
+      activateTab(activeIdx >= 0 ? activeIdx : 0);
+    });
+
+    // Auto-focus close-x once the modal is in the DOM
+    setTimeout(() => overlay.querySelector("#do-close-x")?.focus(), 0);
+
+    const initialPanel = panels[0];
+    if (initialPanel) autoAdjustColumnWidth(initialPanel);
   }
 
-  document.addEventListener("keydown", onKeyDown);
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) closeOverlay();
-  });
-
-  document.getElementById("do-close").onclick = closeOverlay;
-  document.getElementById("do-close-x").onclick = closeOverlay;
-
-  // === TABS ===
-  const tabBtns = Array.from(overlay.querySelectorAll(".do-tab"));
-  const panels = Array.from(overlay.querySelectorAll(".do-panel"));
-
-  function activateTab(idx) {
-    tabBtns.forEach((t, i) => {
-      const active = i === idx;
-      t.classList.toggle("active", active);
-      t.setAttribute("aria-selected", active ? "true" : "false");
-      t.tabIndex = active ? 0 : -1;
+  function extractPlainText(container) {
+    const lines = [];
+    container.querySelectorAll("div").forEach((div) => {
+      const clone = div.cloneNode(true);
+      const ln = clone.querySelector(".ln");
+      if (ln) ln.remove();
+      lines.push(clone.innerText);
     });
-    panels.forEach((p, i) => p.classList.toggle("active", i === idx));
-    const activePanel = panels[idx];
-    if (activePanel) autoAdjustColumnWidth(activePanel);
+    return lines.join("\n");
   }
 
-  tabBtns.forEach((tab, i) => {
-    tab.addEventListener("click", () => activateTab(i));
-  });
-
-  const tabsContainer = overlay.querySelector(".do-tabs");
-  if (tabsContainer) {
-    tabsContainer.addEventListener("keydown", (e) => {
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      e.preventDefault();
-      const dir = e.key === "ArrowRight" ? 1 : -1;
-      const cur = tabBtns.findIndex((t) => t.classList.contains("active"));
-      const next = (cur + dir + tabBtns.length) % tabBtns.length;
-      activateTab(next);
-      tabBtns[next].focus();
-    });
-  }
-
-  // === SCROLL SYNC ===
-  const olds = overlay.querySelectorAll(".do-old");
-  const news = overlay.querySelectorAll(".do-new");
-
-  olds.forEach((oldCol, i) => {
-    const newCol = news[i];
-    let isSyncing = false;
-
-    oldCol.addEventListener("scroll", () => {
-      if (isSyncing) return;
-      isSyncing = true;
-      newCol.scrollTop = oldCol.scrollTop;
-      newCol.scrollLeft = oldCol.scrollLeft;
-      isSyncing = false;
-    });
-
-    newCol.addEventListener("scroll", () => {
-      if (isSyncing) return;
-      isSyncing = true;
-      oldCol.scrollTop = newCol.scrollTop;
-      oldCol.scrollLeft = newCol.scrollLeft;
-      isSyncing = false;
-    });
-  });
-
-	  // === COPY BUTTONS ===
-	overlay.querySelectorAll(".do-copy-btn").forEach(btn => {
-
-	  btn.addEventListener("click", async () => {
-
-		const isOld = btn.dataset.copy === "old";
-		const container = btn.closest(".do-col")
-							 .querySelector(isOld ? ".do-old" : ".do-new");
-
-		const text = extractPlainText(container);
-
-		try {
-		  await navigator.clipboard.writeText(text);
-
-		  btn.innerHTML = `
-			<i class="fa-solid fa-check"></i>
-			<span class="btn-label">Gekopieerd</span>
-		  `;
-		  btn.classList.add("copied");
-
-		  setTimeout(() => {
-			btn.innerHTML = `
-			  <i class="fa-solid fa-copy"></i>
-			  <span class="btn-label">Kopieer</span>
-			`;
-			btn.classList.remove("copied");
-		  }, 1500);
-
-		} catch (err) {
-		  console.error("Clipboard error:", err);
-		}
-
-	  });
-
-	});
-
-  const initialPanel = panels[0];
-  if (initialPanel) autoAdjustColumnWidth(initialPanel);
-}
-
-
-	function extractPlainText(container) {
-	  const lines = [];
-
-	  container.querySelectorAll("div").forEach(div => {
-		const clone = div.cloneNode(true);
-
-		// verwijder line number
-		const ln = clone.querySelector(".ln");
-		if (ln) ln.remove();
-
-		lines.push(clone.innerText);
-	  });
-
-	  return lines.join("\n");
-	}
-	  
   function autoAdjustColumnWidth(scope) {
-	  const columns = scope.querySelectorAll(".do-old, .do-new");
+    const columns = scope.querySelectorAll(".do-old, .do-new");
+    columns.forEach((col) => {
+      const lines = col.querySelectorAll("div");
+      let maxWidth = 0;
+      lines.forEach((line) => {
+        const clone = line.cloneNode(true);
+        clone.style.position = "absolute";
+        clone.style.visibility = "hidden";
+        clone.style.whiteSpace = "pre";
+        clone.style.width = "auto";
+        document.body.appendChild(clone);
+        const width = clone.scrollWidth;
+        document.body.removeChild(clone);
+        if (width > maxWidth) maxWidth = width;
+      });
+      const currentWidth = col.clientWidth;
+      if (maxWidth > currentWidth) {
+        col.style.flex = "0 0 " + currentWidth + "px";
+      } else {
+        col.style.flex = "1";
+      }
+    });
+  }
 
-	  columns.forEach(col => {
-		const lines = col.querySelectorAll("div");
-		let maxWidth = 0;
+  function ensureButton() {
+    const grid = getGrid();
+    const container = getGridContainer();
+    if (!grid || !container) return;
 
-		lines.forEach(line => {
-		  const clone = line.cloneNode(true);
-		  clone.style.position = "absolute";
-		  clone.style.visibility = "hidden";
-		  clone.style.whiteSpace = "pre";
-		  clone.style.width = "auto";
-		  document.body.appendChild(clone);
+    const legendRow = container.parentElement?.querySelector(".table-legend-row");
+    const menuRight = legendRow?.querySelector(".menu-right");
 
-		  const width = clone.scrollWidth;
-		  document.body.removeChild(clone);
+    let btn = document.getElementById("do-compare-btn");
 
-		  if (width > maxWidth) {
-			maxWidth = width;
-		  }
-		});
+    if (btn) {
+      if (menuRight && btn.parentElement !== menuRight) {
+        menuRight.insertBefore(btn, menuRight.firstChild);
+      }
+      updateButtonState();
+      return;
+    }
 
-		const currentWidth = col.clientWidth;
+    btn = document.createElement("button");
+    btn.id = "do-compare-btn";
+    btn.type = "button";
+    btn.innerText = "Vergelijk mutaties";
+    btn.onclick = openComparison;
 
-		if (maxWidth > currentWidth) {
-		  // force smaller basis so overflow zichtbaar wordt
-		  col.style.flex = "0 0 " + currentWidth + "px";
-		} else {
-		  col.style.flex = "1";
-		}
-	  });
-	}
+    if (menuRight) {
+      menuRight.insertBefore(btn, menuRight.firstChild);
+    } else {
+      container.prepend(btn);
+    }
 
-
-	function ensureButton() {
-	  const grid = getGrid();
-	  const container = getGridContainer();
-	  if (!grid || !container) return;
-
-	  const legendRow = container.parentElement?.querySelector(".table-legend-row");
-	  const menuRight = legendRow?.querySelector(".menu-right");
-
-	  let btn = document.getElementById("do-compare-btn");
-
-	  if (btn) {
-		// Re-home the button if menu-right became available later (or if a
-		// re-render moved it elsewhere) so it doesn't stay in the fallback spot.
-		if (menuRight && btn.parentElement !== menuRight) {
-		  menuRight.insertBefore(btn, menuRight.firstChild);
-		}
-		return;
-	  }
-
-	  btn = document.createElement("button");
-	  btn.id = "do-compare-btn";
-	  btn.type = "button";
-	  btn.innerText = "Vergelijk mutaties";
-	  btn.onclick = openComparison;
-
-	  if (menuRight) {
-		menuRight.insertBefore(btn, menuRight.firstChild);
-	  } else {
-		container.prepend(btn);
-	  }
-	}
+    updateButtonState();
+  }
 
   function startObservingDom() {
     if (domObserver) return;
@@ -484,7 +753,6 @@
   function scheduleEnsureButton() {
     if (ensureScheduled) return;
     ensureScheduled = true;
-
     requestAnimationFrame(() => {
       ensureScheduled = false;
       ensureButton();

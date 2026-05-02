@@ -1,4 +1,3 @@
-
 function decodeHtml(str) {
   const txt = document.createElement("textarea");
   txt.innerHTML = str ?? "";
@@ -14,34 +13,10 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-function wordDiff(a, b) {
-  const aw = a.split(/(\s+)/);
-  const bw = b.split(/(\s+)/);
-  const max = Math.max(aw.length, bw.length);
-
-  let left = "";
-  let right = "";
-
-  for (let i = 0; i < max; i++) {
-    const wa = aw[i] ?? "";
-    const wb = bw[i] ?? "";
-
-    if (wa === wb) {
-      left += escapeHtml(wa);
-      right += escapeHtml(wb);
-    } else {
-      if (wa) left += `<span class="wdiff-removed">${escapeHtml(wa)}</span>`;
-      if (wb) right += `<span class="wdiff-added">${escapeHtml(wb)}</span>`;
-    }
-  }
-
-  return { left, right };
-}
-
 function buildLcsMatrix(a, b) {
-  const matrix = Array(a.length + 1).fill(null).map(() =>
-    Array(b.length + 1).fill(0)
-  );
+  const matrix = Array(a.length + 1)
+    .fill(null)
+    .map(() => Array(b.length + 1).fill(0));
 
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {
@@ -56,36 +31,39 @@ function buildLcsMatrix(a, b) {
   return matrix;
 }
 
-function diffLines(oldLines, newLines) {
-  const matrix = buildLcsMatrix(oldLines, newLines);
+function diffSequences(a, b) {
+  const matrix = buildLcsMatrix(a, b);
   const result = [];
 
   let i = 0;
   let j = 0;
 
-  while (i < oldLines.length && j < newLines.length) {
-    if (oldLines[i] === newLines[j]) {
-      result.push({ type: "equal", old: oldLines[i], new: newLines[j] });
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      result.push({ type: "equal", value: a[i] });
       i++;
       j++;
     } else if (matrix[i + 1][j] >= matrix[i][j + 1]) {
-      result.push({ type: "removed", old: oldLines[i], new: "" });
+      result.push({ type: "removed", value: a[i] });
       i++;
     } else {
-      result.push({ type: "added", old: "", new: newLines[j] });
+      result.push({ type: "added", value: b[j] });
       j++;
     }
   }
 
-  while (i < oldLines.length) {
-    result.push({ type: "removed", old: oldLines[i++], new: "" });
-  }
-
-  while (j < newLines.length) {
-    result.push({ type: "added", old: "", new: newLines[j++] });
-  }
+  while (i < a.length) result.push({ type: "removed", value: a[i++] });
+  while (j < b.length) result.push({ type: "added", value: b[j++] });
 
   return result;
+}
+
+function diffLines(oldLines, newLines) {
+  return diffSequences(oldLines, newLines).map((part) => ({
+    type: part.type,
+    old: part.type === "added" ? "" : part.value,
+    new: part.type === "removed" ? "" : part.value
+  }));
 }
 
 function tryPairRemovedAdded(diff) {
@@ -115,6 +93,48 @@ function tryPairRemovedAdded(diff) {
   return diff.filter((d) => d.type !== "paired");
 }
 
+function wordDiff(a, b) {
+  const aw = a.split(/(\s+)/);
+  const bw = b.split(/(\s+)/);
+  const parts = diffSequences(aw, bw);
+
+  let left = "";
+  let right = "";
+
+  for (const p of parts) {
+    const html = escapeHtml(p.value);
+    if (p.type === "equal") {
+      left += html;
+      right += html;
+    } else if (p.type === "removed") {
+      if (p.value !== "") left += `<span class="wdiff-removed">${html}</span>`;
+    } else {
+      if (p.value !== "") right += `<span class="wdiff-added">${html}</span>`;
+    }
+  }
+
+  return { left, right };
+}
+
+// Cap the LCS line matrix to keep memory + time reasonable on huge diffs.
+const LCS_CELL_LIMIT = 1_500_000;
+
+function renderLargeDiff(oldLines, newLines) {
+  const dump = (lines, cls) =>
+    lines
+      .map(
+        (line, idx) =>
+          `<div class="${cls}"><span class="ln">${idx + 1}</span>${escapeHtml(line)}</div>`
+      )
+      .join("");
+
+  return {
+    left: dump(oldLines, ""),
+    right: dump(newLines, ""),
+    truncated: true
+  };
+}
+
 function renderDiff(oldText, newText) {
   oldText = decodeHtml(oldText || "");
   newText = decodeHtml(newText || "");
@@ -122,41 +142,40 @@ function renderDiff(oldText, newText) {
   const oldLines = oldText.replace(/\r\n/g, "\n").split("\n");
   const newLines = newText.replace(/\r\n/g, "\n").split("\n");
 
+  if (oldLines.length * newLines.length > LCS_CELL_LIMIT) {
+    return renderLargeDiff(oldLines, newLines);
+  }
+
   let diff = diffLines(oldLines, newLines);
   diff = tryPairRemovedAdded(diff);
 
   let left = "";
   let right = "";
+  let oldLn = 1;
+  let newLn = 1;
 
-  diff.forEach((part, index) => {
-
-  const ln = `<span class="ln">${index + 1}</span>`;
-
-  if (part.type === "equal") {
-    left += `<div>${ln}${escapeHtml(part.old)}</div>`;
-    right += `<div>${ln}${escapeHtml(part.new)}</div>`;
+  for (const part of diff) {
+    if (part.type === "equal") {
+      left += `<div><span class="ln">${oldLn}</span>${escapeHtml(part.old)}</div>`;
+      right += `<div><span class="ln">${newLn}</span>${escapeHtml(part.new)}</div>`;
+      oldLn++;
+      newLn++;
+    } else if (part.type === "removed") {
+      left += `<div class="diff-removed"><span class="ln">${oldLn}</span>${escapeHtml(part.old)}</div>`;
+      right += `<div class="diff-removed-empty"><span class="ln"></span></div>`;
+      oldLn++;
+    } else if (part.type === "added") {
+      left += `<div class="diff-empty"><span class="ln"></span></div>`;
+      right += `<div class="diff-added"><span class="ln">${newLn}</span>${escapeHtml(part.new)}</div>`;
+      newLn++;
+    } else if (part.type === "changed") {
+      const wd = wordDiff(part.old, part.new);
+      left += `<div class="diff-removed"><span class="ln">${oldLn}</span>${wd.left}</div>`;
+      right += `<div class="diff-added"><span class="ln">${newLn}</span>${wd.right}</div>`;
+      oldLn++;
+      newLn++;
+    }
   }
 
-  if (part.type === "removed") {
-    left += `<div class="diff-removed">${ln}${escapeHtml(part.old)}</div>`;
-    right += `<div class="diff-removed-empty">${ln}</div>`;
-  }
-
-  if (part.type === "added") {
-    left += `<div class="diff-empty">${ln}</div>`;
-    right += `<div class="diff-added">${ln}${escapeHtml(part.new)}</div>`;
-  }
-
-  if (part.type === "changed") {
-    const wd = wordDiff(part.old, part.new);
-
-    left += `<div class="diff-removed">${ln}${wd.left}</div>`;
-    right += `<div class="diff-added">${ln}${wd.right}</div>`;
-  }
-
-});
-
-// ✅ return NA de loop
-return { left, right };
-
+  return { left, right };
 }
