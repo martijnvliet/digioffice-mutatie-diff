@@ -244,9 +244,9 @@
     </div>`;
   }
 
-  function buildPanelHtml(field, index, useTabs) {
+  function buildPanelHtml(field, index, useSidebar) {
     const safeVeld = escapeHtml(field.veld);
-    const titleHtml = useTabs
+    const titleHtml = useSidebar
       ? ""
       : `<div class="do-field-title">${safeVeld}</div>`;
     const truncatedNotice = field.diff.truncated
@@ -254,7 +254,7 @@
       : "";
 
     return `
-  <div id="do-panel-${index}" class="do-field-block do-panel${index === 0 ? " active" : ""}" role="${useTabs ? "tabpanel" : "group"}" ${useTabs ? `aria-labelledby="do-tab-${index}"` : ""} data-panel-idx="${index}">
+  <div id="do-panel-${index}" class="do-field-block do-panel${index === 0 ? " active" : ""}" role="${useSidebar ? "tabpanel" : "group"}" ${useSidebar ? `aria-labelledby="do-sidebar-item-${index}"` : ""} data-panel-idx="${index}">
     ${titleHtml}
     ${buildPanelToolbar()}
     ${truncatedNotice}
@@ -304,21 +304,24 @@
     }
 
     let fields = buildFields();
-    const useTabs = fields.length > 1;
+    const useSidebar = fields.length > 1;
     const summary = `${fields.length} veld${fields.length === 1 ? "" : "en"} geselecteerd`;
 
-    const tabsHtml = useTabs
-      ? `<div class="do-tabs" role="tablist" aria-label="Velden">${fields
-          .map((f, i) => {
-            const safeVeld = escapeHtml(f.veld);
-            const safeDatum = escapeHtml(f.datum);
-            const tooltip = f.datum ? `${safeVeld} — ${safeDatum}` : safeVeld;
-            const dateSpan = f.datum
-              ? `<span class="do-tab-date">${safeDatum}</span>`
-              : "";
-            return `<button id="do-tab-${i}" class="do-tab${i === 0 ? " active" : ""}" type="button" role="tab" aria-selected="${i === 0 ? "true" : "false"}" aria-controls="do-panel-${i}" tabindex="${i === 0 ? "0" : "-1"}" data-panel-idx="${i}" title="${tooltip}"><span class="do-tab-name">${safeVeld}</span>${dateSpan}</button>`;
-          })
-          .join("")}</div>`
+    const sidebarHtml = useSidebar
+      ? `<aside class="do-sidebar" aria-label="Velden">
+    <div class="do-sidebar-header">Velden (${fields.length})</div>
+    <div class="do-sidebar-list" role="listbox" aria-label="Velden">${fields
+      .map((f, i) => {
+        const safeVeld = escapeHtml(f.veld);
+        const safeDatum = escapeHtml(f.datum);
+        const tooltip = f.datum ? `${safeVeld} — ${safeDatum}` : safeVeld;
+        const dateSpan = f.datum
+          ? `<span class="do-sidebar-date">${safeDatum}</span>`
+          : "";
+        return `<button id="do-sidebar-item-${i}" class="do-sidebar-item${i === 0 ? " active" : ""}" type="button" role="option" aria-selected="${i === 0 ? "true" : "false"}" aria-controls="do-panel-${i}" tabindex="${i === 0 ? "0" : "-1"}" data-panel-idx="${i}" title="${tooltip}"><span class="do-sidebar-name">${safeVeld}</span>${dateSpan}</button>`;
+      })
+      .join("")}</div>
+  </aside>`
       : "";
 
     const overlay = document.createElement("div");
@@ -339,8 +342,10 @@
       <button id="do-close-x" type="button" class="do-close-x" aria-label="Sluiten" title="Sluiten (Esc)">&times;</button>
     </div>
   </div>
-  ${tabsHtml}
-  <div class="do-content">${fields.map((f, i) => buildPanelHtml(f, i, useTabs)).join("")}</div>
+  <div class="do-body">
+    ${sidebarHtml}
+    <div class="do-content">${fields.map((f, i) => buildPanelHtml(f, i, useSidebar)).join("")}</div>
+  </div>
 
   <div class="do-footer">
     <label class="do-toggle">
@@ -408,39 +413,42 @@
     overlay.querySelector("#do-close").onclick = closeOverlay;
     overlay.querySelector("#do-close-x").onclick = closeOverlay;
 
-    // === TABS ===
-    let tabBtns = Array.from(overlay.querySelectorAll(".do-tab"));
+    // === SIDEBAR ===
+    const sidebarItems = Array.from(
+      overlay.querySelectorAll(".do-sidebar-item")
+    );
     let panels = Array.from(overlay.querySelectorAll(".do-panel"));
 
-    function activateTab(idx) {
-      tabBtns.forEach((t, i) => {
+    function activatePanel(idx) {
+      sidebarItems.forEach((b, i) => {
         const active = i === idx;
-        t.classList.toggle("active", active);
-        t.setAttribute("aria-selected", active ? "true" : "false");
-        t.tabIndex = active ? 0 : -1;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-selected", active ? "true" : "false");
+        b.tabIndex = active ? 0 : -1;
       });
       panels.forEach((p, i) => p.classList.toggle("active", i === idx));
       const activePanel = panels[idx];
       if (activePanel) autoAdjustColumnWidth(activePanel);
     }
 
-    function bindTabClicks() {
-      tabBtns.forEach((tab, i) => {
-        tab.addEventListener("click", () => activateTab(i));
-      });
-    }
-    bindTabClicks();
+    sidebarItems.forEach((btn, i) => {
+      btn.addEventListener("click", () => activatePanel(i));
+    });
 
-    const tabsContainer = overlay.querySelector(".do-tabs");
-    if (tabsContainer) {
-      tabsContainer.addEventListener("keydown", (e) => {
-        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    const sidebarList = overlay.querySelector(".do-sidebar-list");
+    if (sidebarList) {
+      sidebarList.addEventListener("keydown", (e) => {
+        let dir = 0;
+        if (e.key === "ArrowDown" || e.key === "ArrowRight") dir = 1;
+        else if (e.key === "ArrowUp" || e.key === "ArrowLeft") dir = -1;
+        else return;
         e.preventDefault();
-        const dir = e.key === "ArrowRight" ? 1 : -1;
-        const cur = tabBtns.findIndex((t) => t.classList.contains("active"));
-        const next = (cur + dir + tabBtns.length) % tabBtns.length;
-        activateTab(next);
-        tabBtns[next].focus();
+        const cur = sidebarItems.findIndex((b) =>
+          b.classList.contains("active")
+        );
+        const next = (cur + dir + sidebarItems.length) % sidebarItems.length;
+        activatePanel(next);
+        sidebarItems[next].focus();
       });
     }
 
@@ -650,11 +658,11 @@
       fields = buildFields();
       const content = overlay.querySelector(".do-content");
       content.innerHTML = fields
-        .map((f, i) => buildPanelHtml(f, i, useTabs))
+        .map((f, i) => buildPanelHtml(f, i, useSidebar))
         .join("");
       panels = Array.from(overlay.querySelectorAll(".do-panel"));
       attachPanelHandlers();
-      activateTab(activeIdx >= 0 ? activeIdx : 0);
+      activatePanel(activeIdx >= 0 ? activeIdx : 0);
     });
 
     // Auto-focus close-x once the modal is in the DOM

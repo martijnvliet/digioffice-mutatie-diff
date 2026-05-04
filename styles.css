@@ -155,67 +155,91 @@
   outline-offset: 2px;
 }
 
-/* ==== Tab strip ==== */
-.do-tabs {
-  flex: 0 0 auto;
+/* ==== Body (sidebar + content) ==== */
+.do-body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  gap: 2px;
-  padding: 0 12px;
-  background: #f4f6f9;
-  border-bottom: 1px solid #e0e4eb;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
+  flex-direction: row;
 }
 
-.do-tab {
-  flex: 0 0 auto;
-  display: inline-flex;
+/* ==== Sidebar (field list) ==== */
+.do-sidebar {
+  flex: 0 0 240px;
+  display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 8px 14px;
-  background: transparent !important;
-  border: none !important;
-  border-bottom: 3px solid transparent !important;
-  color: #555 !important;
-  cursor: pointer;
-  font-size: 13px;
-  font-family: inherit;
-  font-weight: 500;
-  max-width: 260px;
-  text-align: left;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  background: #fafbfc;
+  border-right: 1px solid #e0e4eb;
+  overflow: hidden;
 }
 
-.do-tab-name {
-  max-width: 100%;
+.do-sidebar-header {
+  flex: 0 0 auto;
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #e0e4eb;
+  background: #f4f6f9;
+}
+
+.do-sidebar-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.do-sidebar-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: #333 !important;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.do-sidebar-item:hover:not(.active) {
+  background: #eef2f7 !important;
+  border-color: #d0d7e0 !important;
+}
+
+.do-sidebar-item.active {
+  background: #2f4f79 !important;
+  border-color: #2f4f79 !important;
+  color: white !important;
+}
+
+.do-sidebar-item:focus-visible {
+  outline: 2px solid #2f4f79;
+  outline-offset: 1px;
+}
+
+.do-sidebar-name {
+  display: block;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.do-tab-date {
+.do-sidebar-date {
+  display: block;
+  margin-top: 2px;
   font-size: 11px;
   font-weight: 400;
-  opacity: 0.65;
+  opacity: 0.7;
   white-space: nowrap;
-}
-
-.do-tab:hover {
-  color: #2f4f79 !important;
-  background: rgba(47, 79, 121, 0.06) !important;
-}
-
-.do-tab.active {
-  color: #2f4f79 !important;
-  border-bottom-color: #2f4f79 !important;
-  font-weight: 600;
-}
-
-.do-tab:focus-visible {
-  outline: 2px solid #2f4f79;
-  outline-offset: -2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Panels: only the active one is shown */
@@ -540,23 +564,30 @@
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
   }
 
-  .do-tabs {
-    background: #28323f;
+  .do-sidebar {
+    background: #232c39;
+    border-right-color: #3a4658;
+  }
+
+  .do-sidebar-header {
+    background: #1a2230;
+    color: #8a96a8;
     border-bottom-color: #3a4658;
   }
 
-  .do-tab {
-    color: #a8b3c1 !important;
-  }
-
-  .do-tab:hover {
+  .do-sidebar-item {
     color: #e3eaf2 !important;
-    background: rgba(255, 255, 255, 0.04) !important;
   }
 
-  .do-tab.active {
-    color: #8fb0db !important;
-    border-bottom-color: #8fb0db !important;
+  .do-sidebar-item:hover:not(.active) {
+    background: #2a3645 !important;
+    border-color: #3a4658 !important;
+  }
+
+  .do-sidebar-item.active {
+    background: #2f4f79 !important;
+    border-color: #2f4f79 !important;
+    color: white !important;
   }
 
   .do-content {
